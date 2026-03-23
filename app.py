@@ -8,7 +8,7 @@ from teacher_core import process_data
 
 NIEN_KHOA_OPTIONS = ["2025-2026", "2026-2027", "2027-2028"]
 
-st.set_page_config(page_title="Chuyển đổi dữ liệu giáo viên", page_icon="🏫", layout="centered")
+st.set_page_config(page_title="Chuyển đổi dữ liệu giáo viên", page_icon="🔞", layout="centered")
 
 st.markdown("""
 <style>
