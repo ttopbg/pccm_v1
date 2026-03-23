@@ -12,14 +12,35 @@ st.set_page_config(page_title="Tạo PCCM", page_icon="🔞", layout="centered")
 
 st.markdown("""
 <style>
+/* Màu thích nghi sáng/tối qua CSS custom properties */
+:root {
+  --step-bg:       rgba(46, 117, 182, 0.10);
+  --step-border:   #2E75B6;
+  --success-bg:    rgba(67, 160, 71, 0.12);
+  --success-border:#43a047;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --step-bg:       rgba(46, 117, 182, 0.20);
+    --step-border:   #5ba3d9;
+    --success-bg:    rgba(67, 160, 71, 0.20);
+    --success-border:#66bb6a;
+  }
+}
+[data-theme="dark"] {
+  --step-bg:       rgba(46, 117, 182, 0.20);
+  --step-border:   #5ba3d9;
+  --success-bg:    rgba(67, 160, 71, 0.20);
+  --success-border:#66bb6a;
+}
 .main-header{background:linear-gradient(135deg,#1F4E79,#2E75B6);color:white;
   padding:1.5rem 2rem;border-radius:12px;margin-bottom:1.5rem;text-align:center}
 .main-header h1{margin:0;font-size:1.8rem}
 .main-header p{margin:.4rem 0 0;opacity:.85;font-size:.95rem}
-.step-box{background:#f0f4fa;border-left:4px solid #2E75B6;padding:.8rem 1rem;
-  border-radius:0 8px 8px 0;margin-bottom:1rem}
-.success-box{background:#e8f5e9;border-left:4px solid #43a047;padding:.8rem 1rem;
-  border-radius:0 8px 8px 0}
+.step-box{background:var(--step-bg);border-left:4px solid var(--step-border);
+  padding:.8rem 1rem;border-radius:0 8px 8px 0;margin-bottom:1rem}
+.success-box{background:var(--success-bg);border-left:4px solid var(--success-border);
+  padding:.8rem 1rem;border-radius:0 8px 8px 0}
 </style>
 """, unsafe_allow_html=True)
 
