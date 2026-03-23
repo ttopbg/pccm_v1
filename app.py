@@ -8,7 +8,7 @@ from teacher_core import process_data
 
 NIEN_KHOA_OPTIONS = ["2025-2026", "2026-2027", "2027-2028"]
 
-st.set_page_config(page_title="Tạo PCCM", page_icon="🔞", layout="centered")
+st.set_page_config(page_title="PCCM", page_icon="🔞", layout="centered")
 
 st.markdown("""
 <style>
@@ -51,22 +51,22 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="step-box"><b>Bước 1:</b> Tải lên file Excel chứa sheet <code>Data</code></div>',
+st.markdown('<div class="step-box"><b>1️⃣:</b> Tải lên file Excel chứa sheet <code>Data</code></div>',
             unsafe_allow_html=True)
 uploaded = st.file_uploader("Chọn file Excel", type=["xlsx","xls","xlsm"],
                              label_visibility="collapsed")
 
-st.markdown('<div class="step-box";"background-color: #007BFF"><b>Bước 2:</b> Chọn niên khóa</div>',
+st.markdown('<div class="step-box";"background-color: #007BFF"><b>2️⃣:</b> Chọn niên khóa</div>',
             unsafe_allow_html=True)
 nien_khoa = st.selectbox("Niên khóa", options=NIEN_KHOA_OPTIONS, label_visibility="collapsed")
 
-st.markdown('<div class="step-box"><b>Bước 3:</b> Nhấn nút để xử lý</div>',
+st.markdown('<div class="step-box"><b>3️⃣:</b> Nhấn nút để xử lý</div>',
             unsafe_allow_html=True)
 run_btn = st.button("▶  Chuyển đổi", type="primary", use_container_width=True,
                     disabled=(uploaded is None))
 
 if uploaded is None:
-    st.info("📂 Vui lòng tải lên file Excel đầu vào.")
+    st.info("✌️Vui lòng tải lên file Excel đầu vào✌️")
 
 if run_btn and uploaded:
     log_area  = st.empty()
