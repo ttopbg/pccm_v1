@@ -9,8 +9,8 @@ from teacher_core import process_data
 NIEN_KHOA_OPTIONS = ["2025-2026", "2026-2027", "2027-2028"]
 
 st.set_page_config(
-    page_title="Chuyển đổi dữ liệu giáo viên",
-    page_icon="\U0001f3eb",
+    page_title="PCCM",
+    page_icon="🔞",
     layout="wide",
 )
 
@@ -272,7 +272,7 @@ with st.sidebar:
 st.markdown("""
 <div class="main-header">
   <h1>🙃 Tạo file Import PCCM 🙃</h1>
-  <p>Tự động chuyển đổi từ sheet <b>Data</b> → <b>Class / Teachers / Students</b></p>
+  <p>File Input cần có sheet <b>Data</b></p>
 </div>
 """, unsafe_allow_html=True)
 
