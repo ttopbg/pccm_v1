@@ -25,8 +25,8 @@ st.markdown("""
 
 st.markdown("""
 <div class="main-header">
-  <h1>🏫 Chuyển đổi dữ liệu giáo viên</h1>
-  <p>Tự động chuyển đổi từ sheet <b>Data</b> → <b>Class / Teachers / Students</b></p>
+  <h1>🔞 Tạo file Import PCCM</h1>
+  <p>File Input cần có sheet <b>Data</b></p>
 </div>
 """, unsafe_allow_html=True)
 
