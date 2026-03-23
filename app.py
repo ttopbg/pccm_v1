@@ -35,7 +35,7 @@ st.markdown('<div class="step-box"><b>Bước 1:</b> Tải lên file Excel chứ
 uploaded = st.file_uploader("Chọn file Excel", type=["xlsx","xls","xlsm"],
                              label_visibility="collapsed")
 
-st.markdown('<div class="step-box"><b>Bước 2:</b> Chọn niên khóa</div>',
+st.markdown('<div class="step-box";"background-color: #007BFF"><b>Bước 2:</b> Chọn niên khóa</div>',
             unsafe_allow_html=True)
 nien_khoa = st.selectbox("Niên khóa", options=NIEN_KHOA_OPTIONS, label_visibility="collapsed")
 
