@@ -156,7 +156,6 @@ with st.sidebar:
     with st.expander("🔤  3. Nhận diện tên môn học", expanded=False):
         st.markdown("""
 <div class="help-section">
-<h4>Cách hoạt động</h4>
 <h4>Bảng mã môn học</h4>
 <table>
   <tr><th>Tên môn</th><th>Mã</th></tr>
