@@ -100,12 +100,49 @@ def match_subject_local(raw):
 def get_subject_code(raw, _=None):
     return match_subject_local(raw.strip()) if raw and raw.strip() else None
 
-def expand_class_range(text, known_classes=None):
+def _enumerate_splits(grade, alpha, digits, known_classes):
+    """
+    Liệt kê TẤT CẢ các cách tách hợp lệ của chuỗi `digits` sau prefix `grade+alpha`,
+    trong đó mỗi phần đều thuộc known_classes.
+    Trả về list of list[str], mỗi phần tử là một cách tách.
+    Chỉ trả về các cách mà TOÀN BỘ mảnh đều nằm trong known_classes.
+    """
+    n = len(digits)
+    results = []
+
+    def backtrack(pos, current):
+        if pos == n:
+            results.append(list(current))
+            return
+        for length in range(1, n - pos + 1):
+            candidate = f"{grade}{alpha}{digits[pos:pos+length]}"
+            if candidate in known_classes:
+                current.append(candidate)
+                backtrack(pos + length, current)
+                current.pop()
+
+    backtrack(0, [])
+    return results
+
+
+def _is_ambiguous(grade, alpha, digits, known_classes):
+    """
+    Kiểm tra xem chuỗi có nhiều hơn 1 cách tách hợp lệ không.
+    """
+    splits = _enumerate_splits(grade, alpha, digits, known_classes)
+    return splits if len(splits) > 1 else None
+
+
+def expand_class_range(text, known_classes=None, resolved_ambiguities=None):
     """
     Parse chuỗi lớp học thành danh sách lớp.
-    known_classes: tập hợp tên lớp hợp lệ (từ cột GVCN), dùng để tách chính xác
-                   chuỗi ambiguous như "10A12" → ["10A1","10A2"] hay ["10A12"].
+    known_classes: tập hợp tên lớp hợp lệ (từ cột GVCN).
+    resolved_ambiguities: dict {raw_token: [lớp đã chọn]} — lựa chọn của người dùng
+                          cho các chuỗi ambiguous. Nếu None, dùng greedy.
     """
+    if resolved_ambiguities is None:
+        resolved_ambiguities = {}
+
     text = re.sub(r'(\d{2}[A-Za-z]+\d*)\(\d+\)', r'\1', text)
     classes = []
     rp = re.compile(r'(\d{2})([A-Za-zÀ-ỹ]+)(\d+)\s*(?:đến|den|-)\s*\1\2(\d+)', re.UNICODE)
@@ -114,36 +151,43 @@ def expand_class_range(text, known_classes=None):
         for i in range(int(s), int(e)+1): classes.append(f"{g}{a}{i}")
     text = rp.sub('', text)
 
-    def _split_digits_known(grade, alpha, digits):
-        """
-        Tách chuỗi số sau phần chữ dựa trên known_classes.
-        Ưu tiên khớp chính xác với known_classes (greedy từ trái sang phải).
-        Nếu không có known_classes, dùng logic cũ (mỗi chữ số là 1 lớp).
-        """
+    def _split_digits(grade, alpha, digits):
+        raw_token = f"{grade}{alpha}{digits}"
+        # Nếu đã có lựa chọn của user cho token này → dùng luôn
+        if raw_token in resolved_ambiguities:
+            return resolved_ambiguities[raw_token]
         if known_classes:
-            result = []
-            i = 0
-            while i < len(digits):
-                matched = False
-                # thử khớp dài nhất trước (greedy)
-                for length in range(len(digits) - i, 0, -1):
-                    candidate = f"{grade}{alpha}{digits[i:i+length]}"
-                    if candidate in known_classes:
-                        result.append(candidate)
-                        i += length
-                        matched = True
-                        break
-                if not matched:
-                    # không khớp known → mỗi ký tự 1 lớp (fallback cũ)
-                    result.append(f"{grade}{alpha}{digits[i]}")
-                    i += 1
-            return result
+            # Kiểm tra có ambiguous không
+            splits = _enumerate_splits(grade, alpha, digits, known_classes)
+            if len(splits) == 1:
+                return splits[0]  # chỉ 1 cách → dùng luôn
+            elif len(splits) > 1:
+                # Ambiguous nhưng chưa có resolved → dùng greedy (sẽ được hỏi ở UI)
+                # Greedy: khớp dài nhất từ trái sang
+                result = []
+                i = 0
+                while i < len(digits):
+                    matched = False
+                    for length in range(len(digits) - i, 0, -1):
+                        candidate = f"{grade}{alpha}{digits[i:i+length]}"
+                        if candidate in known_classes:
+                            result.append(candidate)
+                            i += length
+                            matched = True
+                            break
+                    if not matched:
+                        result.append(f"{grade}{alpha}{digits[i]}")
+                        i += 1
+                return result
+            else:
+                # Không khớp known nào → mỗi ký tự 1 lớp
+                return [f"{grade}{alpha}{x}" for x in digits]
         else:
             return [f"{grade}{alpha}{x}" for x in digits]
 
     def _compact(m):
         g,a,d = m.group(1),m.group(2),m.group(3)
-        for c in _split_digits_known(g, a, d):
+        for c in _split_digits(g, a, d):
             if c not in classes: classes.append(c)
         return ''
     text = re.sub(r'(\d{2})([A-Za-z]+)(\d{3,})', _compact, text)
@@ -162,7 +206,78 @@ def expand_class_range(text, known_classes=None):
         if c and c not in seen: seen.add(c); result.append(c)
     return result
 
-def parse_pccm(raw_pccm, known_classes=None):
+
+def detect_ambiguous_in_data(df, col_pccm, col_gvcn, known_classes):
+    """
+    Quét toàn bộ dữ liệu PCCM, tìm tất cả chuỗi token ambiguous.
+    Trả về list of dict:
+      {
+        "token":       "10A123",          # chuỗi gốc trong file
+        "grade":       "10",
+        "alpha":       "A",
+        "digits":      "123",
+        "splits":      [["10A1","10A2","10A3"], ["10A12","10A3"], ...],
+        "occurrences": ["GV Nguyễn Văn A (Văn: 10A123)", ...]   # mô tả ngữ cảnh
+      }
+    Mỗi token duy nhất chỉ xuất hiện 1 lần trong kết quả.
+    """
+    if not known_classes:
+        return []
+
+    _ambig_pat = re.compile(r'(\d{2})([A-Za-z]+)(\d{2,})', re.UNICODE)
+    found = {}   # token → dict
+
+    col_hoten = None
+    for cand in ["họ tên","họ và tên","tên","giáo viên","ho ten","hoten"]:
+        col_hoten = find_column(df, [cand])
+        if col_hoten: break
+
+    for _, row in df.iterrows():
+        praw = str(row.get(col_pccm, "")).strip() if pd.notna(row.get(col_pccm)) else ""
+        if not praw:
+            continue
+        hoten = str(row.get(col_hoten, "")).strip() if col_hoten else ""
+
+        # Chuẩn hoá sơ bộ giống parse_pccm
+        text = re.sub(r'\([^)]*\)', '', praw)
+        text = text.replace(';', ',').replace('\n', '+')
+        # Xoá range đã rõ (10A1-10A5, 10A1 đến 10A5)
+        text = re.sub(r'\d{2}[A-Za-z]+\d+\s*(?:đến|den|-)\s*\d{2}[A-Za-z]+\d+', '', text)
+
+        for m in _ambig_pat.finditer(text):
+            grade, alpha, digits = m.group(1), m.group(2), m.group(3)
+            # Chỉ xét nếu chuỗi ≥ 2 chữ số (10A12 trở lên)
+            if len(digits) < 2:
+                continue
+            token = f"{grade}{alpha}{digits}"
+            # Nếu token CHÍNH LÀ 1 lớp hợp lệ trong known → không ambiguous
+            if token in known_classes:
+                continue
+            splits = _enumerate_splits(grade, alpha, digits, known_classes)
+            if len(splits) <= 1:
+                continue  # không ambiguous
+
+            # Tìm ngữ cảnh môn học xung quanh token
+            context_start = max(0, m.start() - 20)
+            context = "..." + text[context_start:m.end()+5].strip() + "..."
+            occurrence = f"{hoten}: …{context}…" if hoten else context
+
+            if token not in found:
+                found[token] = {
+                    "token": token,
+                    "grade": grade,
+                    "alpha": alpha,
+                    "digits": digits,
+                    "splits": splits,
+                    "occurrences": [occurrence],
+                }
+            else:
+                if occurrence not in found[token]["occurrences"]:
+                    found[token]["occurrences"].append(occurrence)
+
+    return list(found.values())
+
+def parse_pccm(raw_pccm, known_classes=None, resolved_ambiguities=None):
     if not raw_pccm or (isinstance(raw_pccm,float) and pd.isna(raw_pccm)): return []
     text = str(raw_pccm).strip()
     def ep(m):
@@ -214,7 +329,9 @@ def parse_pccm(raw_pccm, known_classes=None):
                 idx+=1
                 while idx<len(merged) and merged[idx][0]=='sep': idx+=1
             else: idx+=1
-        elif kind=='class': cur_cls.extend(expand_class_range(val, known_classes)); idx+=1
+        elif kind=='class':
+            cur_cls.extend(expand_class_range(val, known_classes, resolved_ambiguities))
+            idx+=1
         elif kind in ('sep','colon','other'): idx+=1
         else: idx+=1
     flush(cur_subj,cur_cls,results)
@@ -281,7 +398,8 @@ def _ab(ws,sr,er,ncols):
     for row in range(sr,er+1):
         for col in range(1,ncols+1): ws.cell(row=row,column=col).border=border
 
-def process_data(input_src, nien_khoa: str, progress_cb=None) -> bytes:
+def process_data(input_src, nien_khoa: str, progress_cb=None,
+                 resolved_ambiguities=None) -> bytes:
     """
     Xử lý file Excel đầu vào. KHÔNG cần API key.
     input_src: bytes / BytesIO / str path
@@ -346,7 +464,8 @@ def process_data(input_src, nien_khoa: str, progress_cb=None) -> bytes:
                 cn_classes = expand_class_range(gvcn_raw, known_classes if known_classes else None)
                 gvcn_str = ", ".join(cn_classes) if cn_classes else gvcn_raw
 
-        parsed = parse_pccm(praw, known_classes if known_classes else None)
+        parsed = parse_pccm(praw, known_classes if known_classes else None,
+                             resolved_ambiguities or {})
         scodes,mllist = [],[]
         for sr,ll in parsed:
             code = get_subject_code(sr)
