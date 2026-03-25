@@ -115,11 +115,18 @@ with st.sidebar:
   <tr><th>Cột</th><th>Tên chấp nhận được</th></tr>
   <tr><td><span class="tag tag-blue">Họ tên</span></td><td>Họ tên, Họ và tên, Giáo viên…</td></tr>
   <tr><td><span class="tag tag-blue">PCCM</span></td><td>PCCM, Phân công, Môn học giảng dạy, Giảng dạy lớp…</td></tr>
+  <tr><td><span class="tag tag-orange">GVCN</span></td><td>GVCN, Chủ nhiệm, Chủ nhiệm lớp, Lớp chủ nhiệm, CN…</td></tr>
 </table>
 <h4>Các cột không bắt buộc</h4>
 <ul>
   <li><b>STT</b> — Số thứ tự, TT…</li>
   <li><b>Ngày sinh</b> — Ngày sinh, DOB…</li>
+</ul>
+<h4>Vai trò của cột GVCN</h4>
+<ul>
+  <li>Điền vào cột <b>CN</b> trong file output</li>
+  <li>Toàn bộ tên lớp từ cột GVCN được thu thập làm <b>từ điển lớp hợp lệ</b></li>
+  <li>Từ điển này giúp tách chính xác chuỗi lớp trong cột PCCM (xem mục 2)</li>
 </ul>
 </div>
 """, unsafe_allow_html=True)
@@ -130,6 +137,14 @@ with st.sidebar:
 <h4>Cấu trúc cơ bản</h4>
 <p>Dữ liệu theo dạng <b>Tên môn: danh sách lớp</b>, nhiều môn ngăn cách bằng <code>+</code></p>
 <div class="example-row">Hóa: 10A1, 10A2 + Sử: 10D1, 10D2</div>
+
+<h4>Tách lớp thông minh nhờ cột GVCN</h4>
+<p>Khi có cột GVCN, hệ thống xây dựng danh sách lớp hợp lệ và dùng nó để tách chính xác:</p>
+<table>
+  <tr><th>Chuỗi trong PCCM</th><th>Có GVCN (10A1, 10A2)</th><th>Không có GVCN</th></tr>
+  <tr><td><code>10A12</code></td><td>→ 10A1, 10A2 ✅</td><td>→ 10A1, 10A2</td></tr>
+  <tr><td><code>10A12</code> (lớp 10A12 tồn tại)</td><td>→ 10A12 ✅</td><td>→ 10A1, 10A2 ❌</td></tr>
+</table>
 
 <h4>Các định dạng lớp được hỗ trợ</h4>
 <table>
@@ -146,9 +161,8 @@ with st.sidebar:
 
 <h4>Dấu phân cách được hỗ trợ</h4>
 <ul>
-  <li>Giữa các lớp: <code>,</code> &nbsp;<code>;</code> &nbsp;khoảng trắng, <b>chưa phân biệt 10A12 là 10A1 và 10A2 hay chỉ là 10A12</b></li>
+  <li>Giữa các lớp: <code>,</code> &nbsp;<code>;</code> &nbsp;khoảng trắng</li>
   <li>Giữa các môn: <code>+</code> &nbsp;hoặc tên môn đứng trước lớp trực tiếp</li>
-  <li>Ví dụ: <span class="example-row">Hóa: 10A2, Sử 10D1</span> vẫn được nhận diện đúng</li>
 </ul>
 </div>
 """, unsafe_allow_html=True)
@@ -200,7 +214,8 @@ with st.sidebar:
   <tr><td>Ngày sinh</td><td>dd/mm/yyyy</td></tr>
   <tr><td>SĐT</td><td>Để trống, nhập sau</td></tr>
   <tr><td>Môn dạy</td><td>Mã môn, cách nhau dấu phẩy</td></tr>
-  <tr><td>TBM / CN</td><td>Để trống, nhập sau</td></tr>
+  <tr><td>TBM</td><td>Để trống, nhập sau</td></tr>
+  <tr><td>CN</td><td>Lớp chủ nhiệm (từ cột GVCN)</td></tr>
   <tr><td>PCCM</td><td>Dạng: <code>10A1-TOAN,11B2-ANH</code></td></tr>
 </table>
 
@@ -234,32 +249,14 @@ with st.sidebar:
   <li>Giữ nguyên dạng chữ HOA trong cột PCCM</li>
   <li>Đánh dấu <code>?</code> nếu hoàn toàn trống</li>
 </ul>
+
+<h4>Không có cột GVCN</h4>
+<ul>
+  <li>Cột CN trong output sẽ để trống</li>
+  <li>Việc tách lớp trong PCCM vẫn hoạt động bình thường (logic cũ)</li>
+</ul>
 </div>
 """, unsafe_allow_html=True)
-
-#     with st.expander("🚀  6. Hướng dẫn chạy & deploy", expanded=False):
-#         st.markdown("""
-# <div class="help-section">
-# <h4>Chạy local (máy tính)</h4>
-# <ol style="margin:.3rem 0 0 1rem;padding:0">
-#   <li>Cài thư viện: <code>pip install openpyxl pandas</code></li>
-#   <li>Chạy: <code>python convert_teachers_local.py</code></li>
-# </ol>
-
-# <h4>Deploy Streamlit Cloud (web)</h4>
-# <ol style="margin:.3rem 0 0 1rem;padding:0">
-#   <li>Push 3 file lên GitHub:<br>
-#       <code>app.py</code> &nbsp;<code>teacher_core.py</code> &nbsp;<code>requirements.txt</code></li>
-#   <li>Vào <a href="https://streamlit.io/cloud" target="_blank">streamlit.io/cloud</a>
-#       → <b>New app</b></li>
-#   <li>Chọn repo, branch <code>main</code>, main file: <code>app.py</code></li>
-#   <li>Nhấn <b>Deploy</b> — không cần cấu hình thêm gì</li>
-# </ol>
-
-# <h4>Không cần API key</h4>
-# <p>Toàn bộ nhận diện môn học chạy offline bằng từ điển + fuzzy matching.</p>
-# </div>
-# """, unsafe_allow_html=True)
 
 # ── MAIN CONTENT ─────────────────────────────────────────────────────────────
 st.markdown("""
