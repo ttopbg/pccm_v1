@@ -100,7 +100,12 @@ def match_subject_local(raw):
 def get_subject_code(raw, _=None):
     return match_subject_local(raw.strip()) if raw and raw.strip() else None
 
-def expand_class_range(text):
+def expand_class_range(text, known_classes=None):
+    """
+    Parse chuỗi lớp học thành danh sách lớp.
+    known_classes: tập hợp tên lớp hợp lệ (từ cột GVCN), dùng để tách chính xác
+                   chuỗi ambiguous như "10A12" → ["10A1","10A2"] hay ["10A12"].
+    """
     text = re.sub(r'(\d{2}[A-Za-z]+\d*)\(\d+\)', r'\1', text)
     classes = []
     rp = re.compile(r'(\d{2})([A-Za-zÀ-ỹ]+)(\d+)\s*(?:đến|den|-)\s*\1\2(\d+)', re.UNICODE)
@@ -108,14 +113,42 @@ def expand_class_range(text):
         g,a,s,e = m.groups()
         for i in range(int(s), int(e)+1): classes.append(f"{g}{a}{i}")
     text = rp.sub('', text)
+
+    def _split_digits_known(grade, alpha, digits):
+        """
+        Tách chuỗi số sau phần chữ dựa trên known_classes.
+        Ưu tiên khớp chính xác với known_classes (greedy từ trái sang phải).
+        Nếu không có known_classes, dùng logic cũ (mỗi chữ số là 1 lớp).
+        """
+        if known_classes:
+            result = []
+            i = 0
+            while i < len(digits):
+                matched = False
+                # thử khớp dài nhất trước (greedy)
+                for length in range(len(digits) - i, 0, -1):
+                    candidate = f"{grade}{alpha}{digits[i:i+length]}"
+                    if candidate in known_classes:
+                        result.append(candidate)
+                        i += length
+                        matched = True
+                        break
+                if not matched:
+                    # không khớp known → mỗi ký tự 1 lớp (fallback cũ)
+                    result.append(f"{grade}{alpha}{digits[i]}")
+                    i += 1
+            return result
+        else:
+            return [f"{grade}{alpha}{x}" for x in digits]
+
     def _compact(m):
         g,a,d = m.group(1),m.group(2),m.group(3)
-        for x in d:
-            c=f"{g}{a}{x}";
+        for c in _split_digits_known(g, a, d):
             if c not in classes: classes.append(c)
         return ''
     text = re.sub(r'(\d{2})([A-Za-z]+)(\d{3,})', _compact, text)
     text = re.sub(r'(\d{2})([A-Za-z]+)(\d{2})(?![,;.\s])', _compact, text)
+
     def _suffix(m):
         base,nums = m.group(1),m.group(2)
         for n in re.split(r'[,\s]+',nums):
@@ -129,7 +162,7 @@ def expand_class_range(text):
         if c and c not in seen: seen.add(c); result.append(c)
     return result
 
-def parse_pccm(raw_pccm):
+def parse_pccm(raw_pccm, known_classes=None):
     if not raw_pccm or (isinstance(raw_pccm,float) and pd.isna(raw_pccm)): return []
     text = str(raw_pccm).strip()
     def ep(m):
@@ -181,7 +214,7 @@ def parse_pccm(raw_pccm):
                 idx+=1
                 while idx<len(merged) and merged[idx][0]=='sep': idx+=1
             else: idx+=1
-        elif kind=='class': cur_cls.extend(expand_class_range(val)); idx+=1
+        elif kind=='class': cur_cls.extend(expand_class_range(val, known_classes)); idx+=1
         elif kind in ('sep','colon','other'): idx+=1
         else: idx+=1
     flush(cur_subj,cur_cls,results)
@@ -272,11 +305,27 @@ def process_data(input_src, nien_khoa: str, progress_cb=None) -> bytes:
     col_ngay  = find_column(df,["ngày sinh","ngay sinh","sinh ngày","dob","birthday"])
     col_pccm  = find_column(df,["pccm","phân công chuyên môn","phân công",
                                  "giảng dạy lớp","môn học giảng dạy","phan cong","giang day"])
+    col_gvcn  = find_column(df,["gvcn","chủ nhiệm","chu nhiem","chủ nhiệm lớp",
+                                 "chu nhiem lop","lớp chủ nhiệm","lop chu nhiem","cn"])
     if not col_hoten: raise ValueError("Không tìm thấy cột Họ tên!")
     if not col_pccm:  raise ValueError("Không tìm thấy cột PCCM!")
 
     df = df[df[col_hoten].notna()&(df[col_hoten].astype(str).str.strip()!="")].copy()
     df = df.reset_index(drop=True)
+
+    # ── Bước 1: Thu thập known_classes từ toàn bộ cột GVCN ───────────────────
+    # Đọc raw bằng regex cơ bản — KHÔNG qua expand_class_range để tránh tách sai
+    # Mỗi ô GVCN thường chứa tên lớp rõ ràng: "10A1", "10A12", "10A1, 10A2"
+    known_classes: set = set()
+    if col_gvcn:
+        log("Đọc danh sách lớp từ cột GVCN...")
+        _raw_cls_pat = re.compile(r'\d{2}[A-Za-z]+\d+', re.UNICODE)
+        for val in df[col_gvcn]:
+            if pd.notna(val) and str(val).strip():
+                for c in _raw_cls_pat.findall(str(val)):
+                    known_classes.add(c.strip())
+        log(f"  → Nhận diện được {len(known_classes)} lớp: {', '.join(sorted(known_classes))}")
+
     total = len(df)
     teachers = []
 
@@ -288,7 +337,16 @@ def process_data(input_src, nien_khoa: str, progress_cb=None) -> bytes:
                     else (None,""))
         praw = str(row[col_pccm]).strip() if pd.notna(row.get(col_pccm)) else ""
 
-        parsed = parse_pccm(praw)
+        # Đọc lớp chủ nhiệm
+        gvcn_str = ""
+        if col_gvcn and pd.notna(row.get(col_gvcn)):
+            gvcn_raw = str(row[col_gvcn]).strip()
+            if gvcn_raw:
+                # Parse lớp CN — dùng known_classes để tách chính xác
+                cn_classes = expand_class_range(gvcn_raw, known_classes if known_classes else None)
+                gvcn_str = ", ".join(cn_classes) if cn_classes else gvcn_raw
+
+        parsed = parse_pccm(praw, known_classes if known_classes else None)
         scodes,mllist = [],[]
         for sr,ll in parsed:
             code = get_subject_code(sr)
@@ -307,7 +365,7 @@ def process_data(input_src, nien_khoa: str, progress_cb=None) -> bytes:
             if (lop,code) not in seen: seen.add((lop,code)); uml.append((lop,code))
 
         teachers.append({"stt":stt,"ho_ten":hoten,"ngay_dt":ndt,"ngay_str":nstr,
-                         "subject_codes":scodes,"mon_lop_list":uml})
+                         "subject_codes":scodes,"mon_lop_list":uml,"gvcn_str":gvcn_str})
 
     pc = defaultdict(list)
     for t in teachers:
@@ -362,7 +420,8 @@ def process_data(input_src, nien_khoa: str, progress_cb=None) -> bytes:
         else: dc.value=t["ngay_str"]
         wt.cell(row=rn,column=4,value="")
         wt.cell(row=rn,column=5,value=", ".join(t["subject_codes"]))
-        wt.cell(row=rn,column=6,value=""); wt.cell(row=rn,column=7,value="")
+        wt.cell(row=rn,column=6,value="")
+        wt.cell(row=rn,column=7,value=t.get("gvcn_str",""))
         wt.cell(row=rn,column=8,value=t["pccm_str"])
         _sdr(wt,rn,len(ht),i%2==0,left_cols=(2,5,8))
     _ab(wt,1,len(teachers)+1,len(ht))
