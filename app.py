@@ -146,7 +146,7 @@ with st.sidebar:
 
 <h4>Dấu phân cách được hỗ trợ</h4>
 <ul>
-  <li>Giữa các lớp: <code>,</code> &nbsp;<code>;</code> &nbsp;khoảng trắng</li>
+  <li>Giữa các lớp: <code>,</code> &nbsp;<code>;</code> &nbsp;khoảng trắng, <b>chưa phân biệt 10A12 là 10A1 và 10A2 hay chỉ là 10A12</b></li>
   <li>Giữa các môn: <code>+</code> &nbsp;hoặc tên môn đứng trước lớp trực tiếp</li>
   <li>Ví dụ: <span class="example-row">Hóa: 10A2, Sử 10D1</span> vẫn được nhận diện đúng</li>
 </ul>
@@ -244,29 +244,29 @@ with st.sidebar:
 </div>
 """, unsafe_allow_html=True)
 
-    with st.expander("🚀  6. Hướng dẫn chạy & deploy", expanded=False):
-        st.markdown("""
-<div class="help-section">
-<h4>Chạy local (máy tính)</h4>
-<ol style="margin:.3rem 0 0 1rem;padding:0">
-  <li>Cài thư viện: <code>pip install openpyxl pandas</code></li>
-  <li>Chạy: <code>python convert_teachers_local.py</code></li>
-</ol>
+#     with st.expander("🚀  6. Hướng dẫn chạy & deploy", expanded=False):
+#         st.markdown("""
+# <div class="help-section">
+# <h4>Chạy local (máy tính)</h4>
+# <ol style="margin:.3rem 0 0 1rem;padding:0">
+#   <li>Cài thư viện: <code>pip install openpyxl pandas</code></li>
+#   <li>Chạy: <code>python convert_teachers_local.py</code></li>
+# </ol>
 
-<h4>Deploy Streamlit Cloud (web)</h4>
-<ol style="margin:.3rem 0 0 1rem;padding:0">
-  <li>Push 3 file lên GitHub:<br>
-      <code>app.py</code> &nbsp;<code>teacher_core.py</code> &nbsp;<code>requirements.txt</code></li>
-  <li>Vào <a href="https://streamlit.io/cloud" target="_blank">streamlit.io/cloud</a>
-      → <b>New app</b></li>
-  <li>Chọn repo, branch <code>main</code>, main file: <code>app.py</code></li>
-  <li>Nhấn <b>Deploy</b> — không cần cấu hình thêm gì</li>
-</ol>
+# <h4>Deploy Streamlit Cloud (web)</h4>
+# <ol style="margin:.3rem 0 0 1rem;padding:0">
+#   <li>Push 3 file lên GitHub:<br>
+#       <code>app.py</code> &nbsp;<code>teacher_core.py</code> &nbsp;<code>requirements.txt</code></li>
+#   <li>Vào <a href="https://streamlit.io/cloud" target="_blank">streamlit.io/cloud</a>
+#       → <b>New app</b></li>
+#   <li>Chọn repo, branch <code>main</code>, main file: <code>app.py</code></li>
+#   <li>Nhấn <b>Deploy</b> — không cần cấu hình thêm gì</li>
+# </ol>
 
-<h4>Không cần API key</h4>
-<p>Toàn bộ nhận diện môn học chạy offline bằng từ điển + fuzzy matching.</p>
-</div>
-""", unsafe_allow_html=True)
+# <h4>Không cần API key</h4>
+# <p>Toàn bộ nhận diện môn học chạy offline bằng từ điển + fuzzy matching.</p>
+# </div>
+# """, unsafe_allow_html=True)
 
 # ── MAIN CONTENT ─────────────────────────────────────────────────────────────
 st.markdown("""
