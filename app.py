@@ -4,15 +4,13 @@ Deploy: push lên GitHub (app.py + teacher_core.py + requirements.txt) -> stream
 """
 import io
 import streamlit as st
-from teacher_core import process_data
+import pandas as pd
+from teacher_core import (process_data, detect_header_row, find_column,
+                           detect_ambiguous_in_data)
 
 NIEN_KHOA_OPTIONS = ["2025-2026", "2026-2027", "2027-2028"]
 
-st.set_page_config(
-    page_title="PCCM",
-    page_icon="🔞",
-    layout="wide",
-)
+st.set_page_config(page_title="PCCM", page_icon="🔞", layout="wide")
 
 # ── CSS ──────────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -22,6 +20,8 @@ st.markdown("""
   --step-border:    #2E75B6;
   --success-bg:     rgba(67, 160, 71, 0.12);
   --success-border: #43a047;
+  --warn-bg:        rgba(255, 152, 0, 0.10);
+  --warn-border:    #ff9800;
   --help-bg:        rgba(46, 117, 182, 0.07);
   --help-border:    rgba(46, 117, 182, 0.30);
   --code-bg:        rgba(0,0,0,0.06);
@@ -38,6 +38,8 @@ st.markdown("""
     --step-border:    #5ba3d9;
     --success-bg:     rgba(67, 160, 71, 0.20);
     --success-border: #66bb6a;
+    --warn-bg:        rgba(255, 152, 0, 0.18);
+    --warn-border:    #ffa726;
     --help-bg:        rgba(46, 117, 182, 0.12);
     --help-border:    rgba(91,163,217,0.35);
     --code-bg:        rgba(255,255,255,0.08);
@@ -50,34 +52,29 @@ st.markdown("""
   }
 }
 [data-theme="dark"] {
-  --step-bg:        rgba(46, 117, 182, 0.20);
-  --step-border:    #5ba3d9;
-  --success-bg:     rgba(67, 160, 71, 0.20);
-  --success-border: #66bb6a;
-  --help-bg:        rgba(46, 117, 182, 0.12);
-  --help-border:    rgba(91,163,217,0.35);
-  --code-bg:        rgba(255,255,255,0.08);
-  --tag-green-bg:   rgba(67,160,71,0.22);
-  --tag-green-fg:   #81c784;
-  --tag-blue-bg:    rgba(46,117,182,0.22);
-  --tag-blue-fg:    #90caf9;
-  --tag-orange-bg:  rgba(230,119,0,0.22);
-  --tag-orange-fg:  #ffb74d;
+  --step-bg:rgba(46,117,182,.20);--step-border:#5ba3d9;
+  --success-bg:rgba(67,160,71,.20);--success-border:#66bb6a;
+  --warn-bg:rgba(255,152,0,.18);--warn-border:#ffa726;
+  --help-bg:rgba(46,117,182,.12);--help-border:rgba(91,163,217,.35);
+  --code-bg:rgba(255,255,255,.08);
+  --tag-green-bg:rgba(67,160,71,.22);--tag-green-fg:#81c784;
+  --tag-blue-bg:rgba(46,117,182,.22);--tag-blue-fg:#90caf9;
+  --tag-orange-bg:rgba(230,119,0,.22);--tag-orange-fg:#ffb74d;
 }
-
-/* Header */
 .main-header{background:linear-gradient(135deg,#1F4E79,#2E75B6);color:white;
   padding:1.4rem 2rem;border-radius:12px;margin-bottom:1.4rem;text-align:center}
 .main-header h1{margin:0;font-size:1.7rem}
 .main-header p{margin:.35rem 0 0;opacity:.85;font-size:.9rem}
-
-/* Step boxes */
 .step-box{background:var(--step-bg);border-left:4px solid var(--step-border);
   padding:.75rem 1rem;border-radius:0 8px 8px 0;margin-bottom:1rem}
 .success-box{background:var(--success-bg);border-left:4px solid var(--success-border);
   padding:.75rem 1rem;border-radius:0 8px 8px 0}
-
-/* Sidebar help styles */
+.warn-box{background:var(--warn-bg);border-left:4px solid var(--warn-border);
+  padding:.75rem 1rem;border-radius:0 8px 8px 0;margin-bottom:1.2rem}
+.ambig-card{background:var(--help-bg);border:1.5px solid var(--warn-border);
+  border-radius:10px;padding:.9rem 1.1rem;margin-bottom:1.1rem}
+.ambig-token{font-size:1.2rem;font-weight:800;font-family:monospace;color:var(--warn-border)}
+.ambig-ctx{font-size:.82rem;opacity:.7;margin:.2rem 0 .5rem;font-style:italic}
 .help-section{background:var(--help-bg);border:1px solid var(--help-border);
   border-radius:10px;padding:1rem 1.1rem;margin-bottom:.9rem;font-size:.88rem;line-height:1.6}
 .help-section h4{margin:0 0 .5rem;font-size:.95rem;font-weight:700}
@@ -97,7 +94,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── SIDEBAR – Hướng dẫn sử dụng ─────────────────────────────────────────────
+# ── SIDEBAR ──────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 📖 Hướng dẫn sử dụng")
 
@@ -114,19 +111,14 @@ with st.sidebar:
 <table>
   <tr><th>Cột</th><th>Tên chấp nhận được</th></tr>
   <tr><td><span class="tag tag-blue">Họ tên</span></td><td>Họ tên, Họ và tên, Giáo viên…</td></tr>
-  <tr><td><span class="tag tag-blue">PCCM</span></td><td>PCCM, Phân công, Môn học giảng dạy, Giảng dạy lớp…</td></tr>
-  <tr><td><span class="tag tag-orange">GVCN</span></td><td>GVCN, Chủ nhiệm, Chủ nhiệm lớp, Lớp chủ nhiệm, CN…</td></tr>
+  <tr><td><span class="tag tag-blue">PCCM</span></td><td>PCCM, Phân công, Môn học giảng dạy…</td></tr>
+  <tr><td><span class="tag tag-orange">GVCN</span></td><td>GVCN, Chủ nhiệm, Chủ nhiệm lớp, CN…</td></tr>
 </table>
-<h4>Các cột không bắt buộc</h4>
-<ul>
-  <li><b>STT</b> — Số thứ tự, TT…</li>
-  <li><b>Ngày sinh</b> — Ngày sinh, DOB…</li>
-</ul>
 <h4>Vai trò của cột GVCN</h4>
 <ul>
   <li>Điền vào cột <b>CN</b> trong file output</li>
-  <li>Toàn bộ tên lớp từ cột GVCN được thu thập làm <b>từ điển lớp hợp lệ</b></li>
-  <li>Từ điển này giúp tách chính xác chuỗi lớp trong cột PCCM (xem mục 2)</li>
+  <li>Xây dựng <b>danh sách lớp hợp lệ</b> để tách PCCM chính xác</li>
+  <li>Khi gặp chuỗi có nhiều cách tách, hệ thống sẽ <b>hỏi người dùng</b></li>
 </ul>
 </div>
 """, unsafe_allow_html=True)
@@ -139,31 +131,23 @@ with st.sidebar:
 <div class="example-row">Hóa: 10A1, 10A2 + Sử: 10D1, 10D2</div>
 
 <h4>Tách lớp thông minh nhờ cột GVCN</h4>
-<p>Khi có cột GVCN, hệ thống xây dựng danh sách lớp hợp lệ và dùng nó để tách chính xác:</p>
+<p>Khi có cột GVCN, hệ thống xây dựng danh sách lớp hợp lệ. Nếu một chuỗi có <b>nhiều cách tách hợp lệ</b>, hệ thống hiển thị hộp hỏi để bạn chọn.</p>
 <table>
-  <tr><th>Chuỗi trong PCCM</th><th>Có GVCN (10A1, 10A2)</th><th>Không có GVCN</th></tr>
-  <tr><td><code>10A12</code></td><td>→ 10A1, 10A2 ✅</td><td>→ 10A1, 10A2</td></tr>
-  <tr><td><code>10A12</code> (lớp 10A12 tồn tại)</td><td>→ 10A12 ✅</td><td>→ 10A1, 10A2 ❌</td></tr>
+  <tr><th>Chuỗi</th><th>known = {10A1…10A12}</th></tr>
+  <tr><td><code>10A123</code></td><td>⚠️ Hỏi: [10A1,2,3] hay [10A12,3]?</td></tr>
+  <tr><td><code>10A12</code></td><td>→ 10A12 ✅ (chỉ 1 cách)</td></tr>
+  <tr><td><code>10A1-10A5</code></td><td>→ 10A1..10A5 (range rõ ràng)</td></tr>
 </table>
 
 <h4>Các định dạng lớp được hỗ trợ</h4>
 <table>
   <tr><th>Dạng viết</th><th>Kết quả</th></tr>
   <tr><td><code>10A1, 10A2, 10A3</code></td><td>Liệt kê thường</td></tr>
-  <tr><td><code>10A123</code></td><td>→ 10A1, 10A2, 10A3</td></tr>
+  <tr><td><code>10A123</code></td><td>→ tách theo known (hoặc hỏi)</td></tr>
   <tr><td><code>10A1-10A5</code></td><td>→ 10A1 đến 10A5</td></tr>
-  <tr><td><code>10A1 đến 10A5</code></td><td>→ 10A1 đến 10A5</td></tr>
   <tr><td><code>11A3,4</code></td><td>→ 11A3, 11A4</td></tr>
   <tr><td><code>11A1(52)</code></td><td>→ 11A1 (bỏ sĩ số)</td></tr>
-  <tr><td><code>(11A1, 11A2)</code></td><td>→ 11A1, 11A2 (giữ lớp trong ngoặc)</td></tr>
-  <tr><td><code>11C</code></td><td>Lớp không có số index</td></tr>
 </table>
-
-<h4>Dấu phân cách được hỗ trợ</h4>
-<ul>
-  <li>Giữa các lớp: <code>,</code> &nbsp;<code>;</code> &nbsp;khoảng trắng</li>
-  <li>Giữa các môn: <code>+</code> &nbsp;hoặc tên môn đứng trước lớp trực tiếp</li>
-</ul>
 </div>
 """, unsafe_allow_html=True)
 
@@ -187,7 +171,7 @@ with st.sidebar:
   <tr><td>KTPL / GDKTPL</td><td><code>GDKTPL</code></td></tr>
   <tr><td>GDĐP / GDDP</td><td><code>NDGDDP</code></td></tr>
   <tr><td>HĐTN / TNHN</td><td><code>TNHN</code></td></tr>
-  <tr><td>Công nghệ (CN/NN)</td><td><code>CONGNGHE(CN/NN)</code></td></tr>
+  <tr><td>Công nghệ</td><td><code>CONGNGHE</code></td></tr>
   <tr><td>KHTN</td><td><code>KHTN</code></td></tr>
   <tr><td>Lịch sử &amp; Địa lý</td><td><code>LICHSUDIALI</code></td></tr>
 </table>
@@ -198,29 +182,20 @@ with st.sidebar:
         st.markdown("""
 <div class="help-section">
 <h4>File output gồm 3 sheet</h4>
-
-<p><span class="tag tag-blue">Sheet 1: Class</span></p>
-<ul>
-  <li>A1 = <b>Niên khóa</b>, B1 = năm học đã chọn</li>
-  <li>A2 = <b>Lớp</b>, B2 = <b>Khối</b></li>
-  <li>Từ A3: tổng hợp tất cả lớp, sắp xếp theo khối</li>
-</ul>
-
+<p><span class="tag tag-blue">Sheet 1: Class</span> — danh sách lớp, sắp theo khối</p>
 <p><span class="tag tag-green">Sheet 2: Teachers</span></p>
 <table>
   <tr><th>Cột</th><th>Nội dung</th></tr>
   <tr><td>STT</td><td>Số thứ tự</td></tr>
   <tr><td>Họ tên</td><td>Tên giáo viên</td></tr>
   <tr><td>Ngày sinh</td><td>dd/mm/yyyy</td></tr>
-  <tr><td>SĐT</td><td>Để trống, nhập sau</td></tr>
+  <tr><td>SĐT</td><td>Để trống</td></tr>
   <tr><td>Môn dạy</td><td>Mã môn, cách nhau dấu phẩy</td></tr>
-  <tr><td>TBM</td><td>Để trống, nhập sau</td></tr>
+  <tr><td>TBM</td><td>Để trống</td></tr>
   <tr><td>CN</td><td>Lớp chủ nhiệm (từ cột GVCN)</td></tr>
-  <tr><td>PCCM</td><td>Dạng: <code>10A1-TOAN,11B2-ANH</code></td></tr>
+  <tr><td>PCCM</td><td><code>10A1-TOAN,11B2-ANH</code></td></tr>
 </table>
-
-<p><span class="tag tag-orange">Sheet 3: Students</span></p>
-<p>Dòng tiêu đề cố định: STT · Mã HS · Họ tên · Lớp · Giới tính · Ngày sinh · SĐT · Email · Tài khoản</p>
+<p><span class="tag tag-orange">Sheet 3: Students</span> — tiêu đề cố định, dữ liệu trống</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -229,36 +204,55 @@ with st.sidebar:
 <div class="help-section">
 <h4>Xử lý tổ hợp môn-lớp trùng</h4>
 <ul>
-  <li><b>Trùng trong cùng 1 GV:</b> chỉ giữ 1 tổ hợp, bỏ trùng tự động</li>
-  <li><b>Trùng giữa 2+ GV:</b> thêm tên GV vào cuối để phân biệt</li>
+  <li><b>Trùng trong cùng 1 GV:</b> bỏ tự động</li>
+  <li><b>Trùng giữa 2+ GV:</b> thêm tên GV để phân biệt</li>
 </ul>
-<div class="example-row">
-  12A2-HOAHOC(Nguyễn Tuấn Anh)<br>
-  12A2-HOAHOC(Đoàn Văn Chiến)
-</div>
-
-<h4>Ngày sinh</h4>
-<ul>
-  <li>Chấp nhận: <code>dd/mm/yyyy</code>, <code>yyyy-mm-dd</code>, <code>dd-mm-yyyy</code></li>
-  <li>Tự động nhận diện Excel serial date</li>
-  <li>Output luôn định dạng <code>dd/mm/yyyy</code></li>
-</ul>
-
-<h4>Tên môn không nhận diện được</h4>
-<ul>
-  <li>Giữ nguyên dạng chữ HOA trong cột PCCM</li>
-  <li>Đánh dấu <code>?</code> nếu hoàn toàn trống</li>
-</ul>
-
+<div class="example-row">12A2-HOAHOC(Nguyễn Tuấn Anh)<br>12A2-HOAHOC(Đoàn Văn Chiến)</div>
 <h4>Không có cột GVCN</h4>
 <ul>
-  <li>Cột CN trong output sẽ để trống</li>
-  <li>Việc tách lớp trong PCCM vẫn hoạt động bình thường (logic cũ)</li>
+  <li>Cột CN trong output để trống</li>
+  <li>Không có từ điển lớp → không hỏi ambiguous, dùng logic tách cũ</li>
 </ul>
 </div>
 """, unsafe_allow_html=True)
 
-# ── MAIN CONTENT ─────────────────────────────────────────────────────────────
+
+# ── SESSION STATE ─────────────────────────────────────────────────────────────
+for k, v in [("phase","upload"),("ambig_list",[]),("resolved",{}),
+             ("raw_bytes",None),("nien_khoa",NIEN_KHOA_OPTIONS[0]),
+             ("known_classes",set()),("result_bytes",None),("result_filename","")]:
+    if k not in st.session_state:
+        st.session_state[k] = v
+
+
+def _reset():
+    for k in ["phase","ambig_list","resolved","raw_bytes","nien_khoa",
+              "known_classes","result_bytes","result_filename"]:
+        st.session_state.pop(k, None)
+    st.rerun()
+
+
+def _load_df_and_known(raw_bytes):
+    import re
+    xl  = pd.ExcelFile(io.BytesIO(raw_bytes))
+    sn  = next((s for s in xl.sheet_names if s.strip().lower()=="data"), xl.sheet_names[0])
+    rdf = pd.read_excel(io.BytesIO(raw_bytes), sheet_name=sn, header=None)
+    hri = detect_header_row(rdf)
+    df  = pd.read_excel(io.BytesIO(raw_bytes), sheet_name=sn, header=hri)
+    df.columns = [str(c).strip() for c in df.columns]
+    col_gvcn = find_column(df, ["gvcn","chủ nhiệm","chu nhiem","chủ nhiệm lớp",
+                                 "chu nhiem lop","lớp chủ nhiệm","lop chu nhiem","cn"])
+    known = set()
+    if col_gvcn:
+        pat = re.compile(r'\d{2}[A-Za-z]+\d+', re.UNICODE)
+        for val in df[col_gvcn]:
+            if pd.notna(val) and str(val).strip():
+                for c in pat.findall(str(val)):
+                    known.add(c.strip())
+    return df, col_gvcn, known
+
+
+# ── HEADER ────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="main-header">
   <h1>🙃 Tạo file Import PCCM 🙃</h1>
@@ -266,31 +260,119 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="step-box"><b>1️⃣</b> Tải lên file Excel chứa sheet <code>Data</code></div>',
-            unsafe_allow_html=True)
-uploaded = st.file_uploader("Chọn file Excel", type=["xlsx","xls","xlsm"],
-                             label_visibility="collapsed")
 
-st.markdown('<div class="step-box"><b>2️⃣</b> Chọn niên khóa</div>',
-            unsafe_allow_html=True)
-nien_khoa = st.selectbox("Niên khóa", options=NIEN_KHOA_OPTIONS, label_visibility="collapsed")
+# ════════════════════════════════════════════════════════════════════════════
+# PHASE 1 — UPLOAD
+# ════════════════════════════════════════════════════════════════════════════
+if st.session_state.phase == "upload":
 
-st.markdown('<div class="step-box"><b>3️⃣</b> Nhấn nút để xử lý</div>',
-            unsafe_allow_html=True)
-run_btn = st.button("\u25b6  Chuyển đổi", type="primary", use_container_width=True,
-                    disabled=(uploaded is None))
+    st.markdown('<div class="step-box"><b>1️⃣</b> Tải lên file Excel chứa sheet <code>Data</code></div>',
+                unsafe_allow_html=True)
+    uploaded = st.file_uploader("Chọn file Excel", type=["xlsx","xls","xlsm"],
+                                 label_visibility="collapsed")
 
-if uploaded is None:
-    st.info("✌️Vui lòng tải lên file Excel đầu vào✌️")
+    st.markdown('<div class="step-box"><b>2️⃣</b> Chọn niên khóa</div>', unsafe_allow_html=True)
+    nien_khoa = st.selectbox("Niên khóa", options=NIEN_KHOA_OPTIONS, label_visibility="collapsed")
 
-if run_btn and uploaded:
+    st.markdown('<div class="step-box"><b>3️⃣</b> Nhấn nút để xử lý</div>', unsafe_allow_html=True)
+    run_btn = st.button("▶  Chuyển đổi", type="primary", use_container_width=True,
+                        disabled=(uploaded is None))
+
+    if uploaded is None:
+        st.info("✌️ Vui lòng tải lên file Excel đầu vào ✌️")
+
+    if run_btn and uploaded:
+        raw_bytes = uploaded.read()
+        fname     = uploaded.name.rsplit(".",1)[0]
+
+        with st.spinner("Đang phân tích file..."):
+            try:
+                df, col_gvcn, known = _load_df_and_known(raw_bytes)
+                col_pccm = find_column(df, ["pccm","phân công chuyên môn","phân công",
+                                             "giảng dạy lớp","môn học giảng dạy","pcan cong","giang day"])
+                ambig_list = []
+                if known and col_pccm:
+                    ambig_list = detect_ambiguous_in_data(df, col_pccm, col_gvcn, known)
+            except Exception as e:
+                st.error(f"❌ Lỗi đọc file: {e}")
+                st.stop()
+
+        st.session_state.raw_bytes       = raw_bytes
+        st.session_state.nien_khoa       = nien_khoa
+        st.session_state.known_classes   = known
+        st.session_state.result_filename = f"{fname}_output_{nien_khoa}.xlsx"
+
+        if ambig_list:
+            st.session_state.ambig_list = ambig_list
+            st.session_state.resolved   = {}
+            st.session_state.phase      = "confirm_ambig"
+        else:
+            st.session_state.ambig_list = []
+            st.session_state.phase      = "processing"
+        st.rerun()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# PHASE 2 — HỎI AMBIGUOUS
+# ════════════════════════════════════════════════════════════════════════════
+elif st.session_state.phase == "confirm_ambig":
+    ambig_list = st.session_state.ambig_list
+
+    st.markdown(f"""
+<div class="warn-box">
+⚠️ <b>Phát hiện {len(ambig_list)} chuỗi lớp có thể tách theo nhiều cách.</b><br>
+Vui lòng chọn cách tách đúng cho từng chuỗi bên dưới, sau đó nhấn <b>Xác nhận & Tiếp tục</b>.
+</div>
+""", unsafe_allow_html=True)
+
+    choices = {}
+
+    for item in ambig_list:
+        token  = item["token"]
+        splits = item["splits"]
+        occs   = item["occurrences"]
+        option_labels = [", ".join(s) for s in splits]
+
+        ctx_text = " &nbsp;|&nbsp; ".join(occs[:3]) + ("…" if len(occs) > 3 else "")
+        st.markdown(f"""
+<div class="ambig-card">
+  <div>Chuỗi gốc: <span class="ambig-token">{token}</span></div>
+  <div class="ambig-ctx">📍 {ctx_text}</div>
+</div>
+""", unsafe_allow_html=True)
+
+        chosen = st.radio(
+            f"**`{token}`** là:",
+            options=option_labels,
+            key=f"radio_{token}",
+            horizontal=len(option_labels) <= 4,
+        )
+        choices[token] = splits[option_labels.index(chosen)]
+        st.markdown("---")
+
+    col_back, col_confirm = st.columns([1, 3])
+    with col_back:
+        if st.button("← Quay lại", use_container_width=True):
+            _reset()
+    with col_confirm:
+        if st.button("✅  Xác nhận & Tiếp tục", type="primary", use_container_width=True):
+            st.session_state.resolved = choices
+            st.session_state.phase    = "processing"
+            st.rerun()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# PHASE 3 — XỬ LÝ
+# ════════════════════════════════════════════════════════════════════════════
+elif st.session_state.phase == "processing":
     log_area  = st.empty()
     prog_bar  = st.progress(0)
     log_lines = []
 
-    import pandas as pd
-    from teacher_core import detect_header_row, find_column
-    raw_bytes = uploaded.read()
+    raw_bytes = st.session_state.raw_bytes
+    nien_khoa = st.session_state.nien_khoa
+    resolved  = st.session_state.resolved
+
     try:
         _xl  = pd.ExcelFile(io.BytesIO(raw_bytes))
         _sn  = next((s for s in _xl.sheet_names if s.strip().lower()=="data"), _xl.sheet_names[0])
@@ -312,16 +394,41 @@ if run_btn and uploaded:
             prog_bar.progress(min(int(processed[0]/total_t*90), 90))
 
     try:
-        result_bytes = process_data(io.BytesIO(raw_bytes), nien_khoa, progress_cb=progress_cb)
+        result_bytes = process_data(
+            io.BytesIO(raw_bytes), nien_khoa,
+            progress_cb=progress_cb,
+            resolved_ambiguities=resolved,
+        )
         prog_bar.progress(100)
-        fname = uploaded.name.rsplit(".",1)[0]
-        out_name = f"{fname}_output_{nien_khoa}.xlsx"
-        st.markdown('<div class="success-box">\u2705 <b>Chuyển đổi thành công!</b></div>',
-                    unsafe_allow_html=True)
-        st.download_button("\u2b07\ufe0f  Tải xuống file Excel", data=result_bytes,
-                           file_name=out_name,
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                           use_container_width=True)
+        st.session_state.result_bytes = result_bytes
+        st.session_state.phase        = "done"
+        st.rerun()
     except Exception as e:
         prog_bar.empty()
-        st.error(f"\u274c Lỗi: {e}")
+        st.error(f"❌ Lỗi: {e}")
+        if st.button("← Làm lại từ đầu"):
+            _reset()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# PHASE 4 — DONE
+# ════════════════════════════════════════════════════════════════════════════
+elif st.session_state.phase == "done":
+    if st.session_state.resolved:
+        lines = [f"• `{tok}` → **{', '.join(cls_list)}**"
+                 for tok, cls_list in st.session_state.resolved.items()]
+        with st.expander(f"ℹ️ {len(lines)} chuỗi đã xác nhận thủ công", expanded=False):
+            st.markdown("\n".join(lines))
+
+    st.markdown('<div class="success-box">✅ <b>Chuyển đổi thành công!</b></div>',
+                unsafe_allow_html=True)
+    st.download_button(
+        "⬇️  Tải xuống file Excel",
+        data=st.session_state.result_bytes,
+        file_name=st.session_state.result_filename,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+    )
+    st.markdown("---")
+    if st.button("🔄  Chuyển đổi file khác", use_container_width=True):
+        _reset()
