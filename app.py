@@ -124,7 +124,7 @@ with st.sidebar:
 </div>
 """, unsafe_allow_html=True)
 
-    with st.expander("✍️  2. Quy tắc nhập liệu cột PCCM", expanded=False):
+    with st.expander("✍️  2. Chú ý về cột PCCM", expanded=False):
         st.markdown("""
 <div class="help-section">
 <h4>Cấu trúc cơ bản</h4>
@@ -157,12 +157,12 @@ with st.sidebar:
         st.markdown("""
 <div class="help-section">
 <h4>Cách hoạt động</h4>
-<p>Hệ thống nhận diện tên môn theo <b>3 tầng</b>, không cần API:</p>
-<ul>
-  <li><span class="tag tag-green">Tầng 1</span> Khớp chính xác (có dấu): <code>Hóa học</code> → <code>HOAHOC</code></li>
-  <li><span class="tag tag-green">Tầng 2</span> Khớp không dấu + chuỗi con: <code>hoa hoc</code>, <code>hoa</code></li>
-  <li><span class="tag tag-orange">Tầng 3</span> Fuzzy match: nhận diện tên viết gần đúng, sai dấu</li>
-</ul>
+# <p>Hệ thống nhận diện tên môn theo <b>3 tầng</b>, không cần API:</p>
+# <ul>
+#   <li><span class="tag tag-green">Tầng 1</span> Khớp chính xác (có dấu): <code>Hóa học</code> → <code>HOAHOC</code></li>
+#   <li><span class="tag tag-green">Tầng 2</span> Khớp không dấu + chuỗi con: <code>hoa hoc</code>, <code>hoa</code></li>
+#   <li><span class="tag tag-orange">Tầng 3</span> Fuzzy match: nhận diện tên viết gần đúng, sai dấu</li>
+# </ul>
 <h4>Bảng mã môn học</h4>
 <table>
   <tr><th>Tên môn</th><th>Mã</th></tr>
