@@ -68,7 +68,7 @@ _MAP_NO_ACCENT = {_remove_accent(k): v for k, v in SUBJECT_MAP.items()}
 for _c in _ALL_CODES:
     _MAP_NO_ACCENT[_c.lower()] = _c
 
-_CLASS_PAT = r'\d{2}[A-Za-z]+\.?\d{0,2}(?:\.\d+)?'
+_CLASS_PAT = r'\d{2}[A-Za-z]+\.?\d{0,3}(?:\.\d+)?'
 _SUBJECT_STOPWORDS = {
     "đến","den","và","va","từ","tu","lớp","lop",
     "khối","khoi","tới","toi","to","the","from"
@@ -187,6 +187,18 @@ def expand_class_range(text, known_classes=None, resolved_ambiguities=None):
 
     def _compact(m):
         g,a,d = m.group(1),m.group(2),m.group(3)
+        # Nếu chuỗi số có leading zero → là 1 lớp duy nhất, KHÔNG tách
+        # Ví dụ: 10A02 → lớp 10A02, không phải 10A0 + 10A2
+        if d.startswith('0'):
+            c = f"{g}{a}{d}"
+            if c not in classes: classes.append(c)
+            return ''
+        # Nếu chữ số cuối là 0 và không có known_classes để phân biệt
+        # → coi là 1 lớp (10A10 = lớp 10A10, không phải 10A1 + 10A0)
+        if d.endswith('0') and (not known_classes or f"{g}{a}{d}" in known_classes):
+            c = f"{g}{a}{d}"
+            if c not in classes: classes.append(c)
+            return ''
         for c in _split_digits(g, a, d):
             if c not in classes: classes.append(c)
         return ''
@@ -277,6 +289,55 @@ def detect_ambiguous_in_data(df, col_pccm, col_gvcn, known_classes):
 
     return list(found.values())
 
+
+def detect_unknown_subjects(df, col_pccm):
+    """
+    Quét cột PCCM, tìm tất cả tên môn mà match_subject_local() không nhận ra.
+    Trả về list of dict:
+      {
+        "raw":         "Ngoại ngữ 1",   # tên môn gốc chưa map được
+        "suggestion":  "ANH",           # gợi ý tốt nhất (hoặc None)
+        "occurrences": ["GV Trần A: Ngoại ngữ 1 → 10A02, 10A06…", ...]
+      }
+    Mỗi tên môn duy nhất (lower) chỉ xuất hiện 1 lần.
+    """
+    col_hoten = None
+    for cand in ["họ tên","họ và tên","tên","giáo viên","ho ten","hoten"]:
+        col_hoten = find_column(df, [cand])
+        if col_hoten: break
+
+    found = {}  # raw_lower → dict
+
+    for _, row in df.iterrows():
+        praw = str(row.get(col_pccm, "")).strip() if pd.notna(row.get(col_pccm)) else ""
+        if not praw:
+            continue
+        hoten = str(row.get(col_hoten, "")).strip() if col_hoten else ""
+
+        parsed = parse_pccm(praw)
+        for sr, ll in parsed:
+            if not sr:
+                continue
+            code = get_subject_code(sr)
+            if code:
+                continue  # đã nhận diện được → bỏ qua
+            key = sr.lower().strip()
+            # Gợi ý fuzzy tốt nhất với cutoff thấp hơn để dễ suggest
+            suggestion = None
+            sn = _remove_accent(sr)
+            matches = difflib.get_close_matches(sn, list(_MAP_NO_ACCENT.keys()), n=1, cutoff=0.50)
+            if matches:
+                suggestion = _MAP_NO_ACCENT[matches[0]]
+            ctx = (f"{hoten}: {sr} → {', '.join(ll[:3])}{'…' if len(ll)>3 else ''}"
+                   if hoten else f"{sr} → {', '.join(ll[:3])}")
+            if key not in found:
+                found[key] = {"raw": sr, "suggestion": suggestion, "occurrences": [ctx]}
+            else:
+                if ctx not in found[key]["occurrences"]:
+                    found[key]["occurrences"].append(ctx)
+
+    return list(found.values())
+
 def parse_pccm(raw_pccm, known_classes=None, resolved_ambiguities=None):
     if not raw_pccm or (isinstance(raw_pccm,float) and pd.isna(raw_pccm)): return []
     text = str(raw_pccm).strip()
@@ -300,6 +361,11 @@ def parse_pccm(raw_pccm, known_classes=None, resolved_ambiguities=None):
                 k2,v2=tokens[j]
                 if k2=='word': words.append(v2); j+=1
                 elif k2=='sep' and j+1<len(tokens) and tokens[j+1][0]=='word':
+                    words.append(tokens[j+1][1]); j+=2
+                # Gom số đứng sau word (ví dụ: "Ngoại ngữ" + "1" → "Ngoại ngữ 1")
+                elif k2=='other' and re.fullmatch(r'\d+', v2):
+                    words.append(v2); j+=1
+                elif k2=='sep' and j+1<len(tokens) and tokens[j+1][0]=='other' and re.fullmatch(r'\d+', tokens[j+1][1]):
                     words.append(tokens[j+1][1]); j+=2
                 else: break
             merged.append(('word',' '.join(words))); i=j
@@ -399,7 +465,7 @@ def _ab(ws,sr,er,ncols):
         for col in range(1,ncols+1): ws.cell(row=row,column=col).border=border
 
 def process_data(input_src, nien_khoa: str, progress_cb=None,
-                 resolved_ambiguities=None) -> bytes:
+                 resolved_ambiguities=None, resolved_subjects=None) -> bytes:
     """
     Xử lý file Excel đầu vào. KHÔNG cần API key.
     input_src: bytes / BytesIO / str path
@@ -468,7 +534,12 @@ def process_data(input_src, nien_khoa: str, progress_cb=None,
                              resolved_ambiguities or {})
         scodes,mllist = [],[]
         for sr,ll in parsed:
-            code = get_subject_code(sr)
+            # Kiểm tra resolved_subjects trước (user đã chọn thủ công)
+            rs_key = sr.lower().strip() if sr else ""
+            if resolved_subjects and rs_key in resolved_subjects:
+                code = resolved_subjects[rs_key]
+            else:
+                code = get_subject_code(sr)
             if code:
                 if code not in scodes: scodes.append(code)
                 for lop in ll:
