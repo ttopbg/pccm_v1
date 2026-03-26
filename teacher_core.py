@@ -10,6 +10,11 @@ from openpyxl.utils import get_column_letter
 SUBJECT_MAP = {
     "ngữ văn":"NGUVAN","ngữ văn học":"NGUVAN","van":"NGUVAN","nguvan":"NGUVAN","nv":"NGUVAN",
     "toán":"TOAN","toán học":"TOAN","toan":"TOAN",
+    "lịch sử và địa lí":"LICHSUDIALI","lịch sử và địa lý":"LICHSUDIALI",
+    "lich su va dia ly":"LICHSUDIALI","ls&đl":"LICHSUDIALI",
+    "ls & đl":"LICHSUDIALI","lsdl":"LICHSUDIALI",
+    "khoa học tự nhiên":"KHTN","khoa hoc tu nhien":"KHTN","khtn":"KHTN",
+    "nghệ thuật":"NGHETHUAT","nghe thuat":"NGHETHUAT",
     "tiếng anh":"ANH","ngoại ngữ 1":"ANH","ngoại ngữ 2":"ANH","ngoại ngữ":"ANH",
     "anh":"ANH","nn1":"ANH","nn2":"ANH","english":"ANH",
     "lịch sử":"LICHSU","lich su":"LICHSU","sử":"LICHSU","su":"LICHSU","lichsu":"LICHSU",
@@ -48,15 +53,10 @@ SUBJECT_MAP = {
     "âm nhạc":"AMNHAC","am nhac":"AMNHAC","nhạc":"AMNHAC","nhac":"AMNHAC",
     "mỹ thuật":"MYTHUAT","mĩ thuật":"MYTHUAT","my thuat":"MYTHUAT",
     "mi thuat":"MYTHUAT","mt":"MYTHUAT",
-    "lịch sử và địa lí":"LICHSUDIALI","lịch sử và địa lý":"LICHSUDIALI",
-    "lich su va dia ly":"LICHSUDIALI","ls&đl":"LICHSUDIALI",
-    "ls & đl":"LICHSUDIALI","lsdl":"LICHSUDIALI",
-    "khoa học tự nhiên":"KHTN","khoa hoc tu nhien":"KHTN","khtn":"KHTN",
     "giáo dục công dân":"GDCD","giao duc cong dan":"GDCD","gdcd":"GDCD",
     "hoạt động ngoài giờ lên lớp":"HDNGLL",
     "hoat dong ngoai gio len lop":"HDNGLL","hđngll":"HDNGLL","hdngll":"HDNGLL",
     "tiếng dân tộc thiểu số":"TDTTS","tieng dan toc thieu so":"TDTTS",
-    "nghệ thuật":"NGHETHUAT","nghe thuat":"NGHETHUAT",
 }
 
 def _remove_accent(s):
