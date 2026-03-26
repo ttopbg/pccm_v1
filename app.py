@@ -6,7 +6,8 @@ import io
 import streamlit as st
 import pandas as pd
 from teacher_core import (process_data, detect_header_row, find_column,
-                           detect_ambiguous_in_data)
+                           detect_ambiguous_in_data, detect_unknown_subjects,
+                           _ALL_CODES)
 
 NIEN_KHOA_OPTIONS = ["2025-2026", "2026-2027", "2027-2028"]
 
@@ -219,6 +220,7 @@ with st.sidebar:
 
 # ── SESSION STATE ─────────────────────────────────────────────────────────────
 for k, v in [("phase","upload"),("ambig_list",[]),("resolved",{}),
+             ("unknown_list",[]),("resolved_subjects",{}),
              ("raw_bytes",None),("nien_khoa",NIEN_KHOA_OPTIONS[0]),
              ("known_classes",set()),("result_bytes",None),("result_filename","")]:
     if k not in st.session_state:
@@ -226,8 +228,8 @@ for k, v in [("phase","upload"),("ambig_list",[]),("resolved",{}),
 
 
 def _reset():
-    for k in ["phase","ambig_list","resolved","raw_bytes","nien_khoa",
-              "known_classes","result_bytes","result_filename"]:
+    for k in ["phase","ambig_list","resolved","unknown_list","resolved_subjects",
+              "raw_bytes","nien_khoa","known_classes","result_bytes","result_filename"]:
         st.session_state.pop(k, None)
     st.rerun()
 
@@ -290,9 +292,12 @@ if st.session_state.phase == "upload":
                 df, col_gvcn, known = _load_df_and_known(raw_bytes)
                 col_pccm = find_column(df, ["pccm","phân công chuyên môn","phân công",
                                              "giảng dạy lớp","môn học giảng dạy","pcan cong","giang day"])
-                ambig_list = []
-                if known and col_pccm:
-                    ambig_list = detect_ambiguous_in_data(df, col_pccm, col_gvcn, known)
+                ambig_list   = []
+                unknown_list = []
+                if col_pccm:
+                    if known:
+                        ambig_list = detect_ambiguous_in_data(df, col_pccm, col_gvcn, known)
+                    unknown_list = detect_unknown_subjects(df, col_pccm)
             except Exception as e:
                 st.error(f"❌ Lỗi đọc file: {e}")
                 st.stop()
@@ -303,12 +308,19 @@ if st.session_state.phase == "upload":
         st.session_state.result_filename = f"{fname}_output_{nien_khoa}.xlsx"
 
         if ambig_list:
-            st.session_state.ambig_list = ambig_list
-            st.session_state.resolved   = {}
-            st.session_state.phase      = "confirm_ambig"
+            st.session_state.ambig_list    = ambig_list
+            st.session_state.unknown_list  = unknown_list
+            st.session_state.resolved      = {}
+            st.session_state.phase         = "confirm_ambig"
+        elif unknown_list:
+            st.session_state.ambig_list    = []
+            st.session_state.unknown_list  = unknown_list
+            st.session_state.resolved_subjects = {}
+            st.session_state.phase         = "confirm_subjects"
         else:
-            st.session_state.ambig_list = []
-            st.session_state.phase      = "processing"
+            st.session_state.ambig_list    = []
+            st.session_state.unknown_list  = []
+            st.session_state.phase         = "processing"
         st.rerun()
 
 
@@ -357,7 +369,78 @@ Vui lòng chọn cách tách đúng cho từng chuỗi bên dưới, sau đó nh
     with col_confirm:
         if st.button("✅  Xác nhận & Tiếp tục", type="primary", use_container_width=True):
             st.session_state.resolved = choices
-            st.session_state.phase    = "processing"
+            # Sau ambig → kiểm tra xem có môn không nhận ra không
+            if st.session_state.get("unknown_list"):
+                st.session_state.resolved_subjects = {}
+                st.session_state.phase = "confirm_subjects"
+            else:
+                st.session_state.phase = "processing"
+            st.rerun()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# PHASE 2b — HỎI MÔN KHÔNG NHẬN RA
+# ════════════════════════════════════════════════════════════════════════════
+elif st.session_state.phase == "confirm_subjects":
+    unknown_list = st.session_state.unknown_list
+    # Danh sách tất cả mã môn để chọn, sắp xếp
+    all_codes = sorted(set(_ALL_CODES))
+    # Thêm lựa chọn "Giữ nguyên" (không map)
+    KEEP_RAW = "— Giữ nguyên (không map) —"
+    code_options = [KEEP_RAW] + all_codes
+
+    st.markdown(f"""
+<div class="warn-box">
+⚠️ <b>Phát hiện {len(unknown_list)} tên môn chưa nhận diện được.</b><br>
+Vui lòng chọn mã môn tương ứng cho từng tên bên dưới, sau đó nhấn <b>Xác nhận & Tiếp tục</b>.
+</div>
+""", unsafe_allow_html=True)
+
+    subj_choices = {}  # raw_lower → code
+
+    for item in unknown_list:
+        raw        = item["raw"]
+        suggestion = item["suggestion"]
+        occs       = item["occurrences"]
+
+        # Index mặc định: dùng gợi ý nếu có
+        default_idx = code_options.index(suggestion) if suggestion and suggestion in code_options else 0
+
+        ctx_text = " &nbsp;|&nbsp; ".join(occs[:3]) + ("…" if len(occs) > 3 else "")
+        st.markdown(f"""
+<div class="ambig-card">
+  <div>Tên môn gốc: <span class="ambig-token">{raw}</span>
+    {"&nbsp; 💡 Gợi ý: <b>" + suggestion + "</b>" if suggestion else ""}
+  </div>
+  <div class="ambig-ctx">📍 {ctx_text}</div>
+</div>
+""", unsafe_allow_html=True)
+
+        chosen = st.selectbox(
+            f"Mã môn cho **\"{raw}\"**:",
+            options=code_options,
+            index=default_idx,
+            key=f"subj_{raw}",
+        )
+        subj_choices[raw.lower().strip()] = None if chosen == KEEP_RAW else chosen
+        st.markdown("---")
+
+    col_back, col_confirm = st.columns([1, 3])
+    with col_back:
+        if st.button("← Quay lại", use_container_width=True):
+            # Nếu trước đó có ambig thì về confirm_ambig, không thì về upload
+            if st.session_state.get("ambig_list"):
+                st.session_state.phase = "confirm_ambig"
+            else:
+                _reset()
+            st.rerun()
+    with col_confirm:
+        if st.button("✅  Xác nhận & Tiếp tục", type="primary", use_container_width=True):
+            # Chỉ lưu những môn đã chọn mã (bỏ qua KEEP_RAW)
+            st.session_state.resolved_subjects = {
+                k: v for k, v in subj_choices.items() if v is not None
+            }
+            st.session_state.phase = "processing"
             st.rerun()
 
 
@@ -371,7 +454,8 @@ elif st.session_state.phase == "processing":
 
     raw_bytes = st.session_state.raw_bytes
     nien_khoa = st.session_state.nien_khoa
-    resolved  = st.session_state.resolved
+    resolved          = st.session_state.get("resolved", {})
+    resolved_subjects = st.session_state.get("resolved_subjects", {})
 
     try:
         _xl  = pd.ExcelFile(io.BytesIO(raw_bytes))
@@ -398,6 +482,7 @@ elif st.session_state.phase == "processing":
             io.BytesIO(raw_bytes), nien_khoa,
             progress_cb=progress_cb,
             resolved_ambiguities=resolved,
+            resolved_subjects=resolved_subjects,
         )
         prog_bar.progress(100)
         st.session_state.result_bytes = result_bytes
@@ -414,11 +499,16 @@ elif st.session_state.phase == "processing":
 # PHASE 4 — DONE
 # ════════════════════════════════════════════════════════════════════════════
 elif st.session_state.phase == "done":
-    if st.session_state.resolved:
-        lines = [f"• `{tok}` → **{', '.join(cls_list)}**"
-                 for tok, cls_list in st.session_state.resolved.items()]
-        with st.expander(f"ℹ️ {len(lines)} chuỗi đã xác nhận thủ công", expanded=False):
-            st.markdown("\n".join(lines))
+    summary_lines = []
+    if st.session_state.get("resolved"):
+        for tok, cls_list in st.session_state.resolved.items():
+            summary_lines.append(f"• Lớp `{tok}` → **{', '.join(cls_list)}**")
+    if st.session_state.get("resolved_subjects"):
+        for raw, code in st.session_state.resolved_subjects.items():
+            summary_lines.append(f"• Môn **\"{raw}\"** → `{code}`")
+    if summary_lines:
+        with st.expander(f"ℹ️ {len(summary_lines)} mục đã xác nhận thủ công", expanded=False):
+            st.markdown("\n".join(summary_lines))
 
     st.markdown('<div class="success-box">✅ <b>Chuyển đổi thành công!</b></div>',
                 unsafe_allow_html=True)
