@@ -10,11 +10,6 @@ from openpyxl.utils import get_column_letter
 SUBJECT_MAP = {
     "ngữ văn":"NGUVAN","ngữ văn học":"NGUVAN","van":"NGUVAN","nguvan":"NGUVAN","nv":"NGUVAN",
     "toán":"TOAN","toán học":"TOAN","toan":"TOAN",
-    "lịch sử và địa lí":"LICHSUDIALI","lịch sử và địa lý":"LICHSUDIALI",
-    "lich su va dia ly":"LICHSUDIALI","ls&đl":"LICHSUDIALI",
-    "ls & đl":"LICHSUDIALI","lsdl":"LICHSUDIALI",
-    "khoa học tự nhiên":"KHTN","khoa hoc tu nhien":"KHTN","khtn":"KHTN",
-    "nghệ thuật":"NGHETHUAT","nghe thuat":"NGHETHUAT",
     "tiếng anh":"ANH","ngoại ngữ 1":"ANH","ngoại ngữ 2":"ANH","ngoại ngữ":"ANH",
     "anh":"ANH","nn1":"ANH","nn2":"ANH","english":"ANH",
     "lịch sử":"LICHSU","lich su":"LICHSU","sử":"LICHSU","su":"LICHSU","lichsu":"LICHSU",
@@ -53,10 +48,15 @@ SUBJECT_MAP = {
     "âm nhạc":"AMNHAC","am nhac":"AMNHAC","nhạc":"AMNHAC","nhac":"AMNHAC",
     "mỹ thuật":"MYTHUAT","mĩ thuật":"MYTHUAT","my thuat":"MYTHUAT",
     "mi thuat":"MYTHUAT","mt":"MYTHUAT",
+    "lịch sử và địa lí":"LICHSUDIALI","lịch sử và địa lý":"LICHSUDIALI",
+    "lich su va dia ly":"LICHSUDIALI","ls&đl":"LICHSUDIALI",
+    "ls & đl":"LICHSUDIALI","lsdl":"LICHSUDIALI",
+    "khoa học tự nhiên":"KHTN","khoa hoc tu nhien":"KHTN","khtn":"KHTN",
     "giáo dục công dân":"GDCD","giao duc cong dan":"GDCD","gdcd":"GDCD",
     "hoạt động ngoài giờ lên lớp":"HDNGLL",
     "hoat dong ngoai gio len lop":"HDNGLL","hđngll":"HDNGLL","hdngll":"HDNGLL",
     "tiếng dân tộc thiểu số":"TDTTS","tieng dan toc thieu so":"TDTTS",
+    "nghệ thuật":"NGHETHUAT","nghe thuat":"NGHETHUAT",
 }
 
 def _remove_accent(s):
@@ -68,7 +68,8 @@ _MAP_NO_ACCENT = {_remove_accent(k): v for k, v in SUBJECT_MAP.items()}
 for _c in _ALL_CODES:
     _MAP_NO_ACCENT[_c.lower()] = _c
 
-_CLASS_PAT = r'\d{2}[A-Za-z]+\.?\d{0,3}(?:\.\d+)?'
+_GRADE_PFX  = r'(?:0?[1-9]|1[0-2])'          # khối 1-9 (có thể có leading 0) hoặc 10-12
+_CLASS_PAT  = r'(?<!\d)' + _GRADE_PFX + r'[A-Za-zÀ-ỹ]+\.?\d{0,3}(?:\.\d+)?'
 _SUBJECT_STOPWORDS = {
     "đến","den","và","va","từ","tu","lớp","lop",
     "khối","khoi","tới","toi","to","the","from"
@@ -136,65 +137,60 @@ def _is_ambiguous(grade, alpha, digits, known_classes):
 def expand_class_range(text, known_classes=None, resolved_ambiguities=None):
     """
     Parse chuỗi lớp học thành danh sách lớp.
+    Hỗ trợ khối 1-12 (bao gồm dạng viết tắt 1A, 6B, 9C và dạng 01A…).
     known_classes: tập hợp tên lớp hợp lệ (từ cột GVCN).
-    resolved_ambiguities: dict {raw_token: [lớp đã chọn]} — lựa chọn của người dùng
-                          cho các chuỗi ambiguous. Nếu None, dùng greedy.
+    resolved_ambiguities: dict {raw_token: [lớp đã chọn]} — lựa chọn của người dùng.
     """
     if resolved_ambiguities is None:
         resolved_ambiguities = {}
 
-    text = re.sub(r'(\d{2}[A-Za-z]+\d*)\(\d+\)', r'\1', text)
+    # Bỏ sĩ số trong ngoặc: 10A1(52) → 10A1
+    text = re.sub(r'((?:0?[1-9]|1[0-2])[A-Za-zÀ-ỹ]+\d*)\(\d+\)', r'\1', text, flags=re.UNICODE)
     classes = []
-    rp = re.compile(r'(\d{2})([A-Za-zÀ-ỹ]+)(\d+)\s*(?:đến|den|-)\s*\1\2(\d+)', re.UNICODE)
+
+    # ── Xử lý range: 1A1-1A5, 9B1 đến 9B3, 10A1-10A5 ──────────────────────
+    rp = re.compile(
+        r'(0?[1-9]|1[0-2])([A-Za-zÀ-ỹ]+)(\d+)\s*(?:đến|den|-)\s*\1\2(\d+)',
+        re.UNICODE)
     for m in rp.finditer(text):
-        g,a,s,e = m.groups()
-        for i in range(int(s), int(e)+1): classes.append(f"{g}{a}{i}")
+        g, a, s, e = m.groups()
+        for i in range(int(s), int(e)+1):
+            classes.append(f"{g}{a}{i}")
     text = rp.sub('', text)
 
     def _split_digits(grade, alpha, digits):
         raw_token = f"{grade}{alpha}{digits}"
-        # Nếu đã có lựa chọn của user cho token này → dùng luôn
         if raw_token in resolved_ambiguities:
             return resolved_ambiguities[raw_token]
         if known_classes:
-            # Kiểm tra có ambiguous không
             splits = _enumerate_splits(grade, alpha, digits, known_classes)
             if len(splits) == 1:
-                return splits[0]  # chỉ 1 cách → dùng luôn
+                return splits[0]
             elif len(splits) > 1:
-                # Ambiguous nhưng chưa có resolved → dùng greedy (sẽ được hỏi ở UI)
-                # Greedy: khớp dài nhất từ trái sang
-                result = []
-                i = 0
+                # Ambiguous → greedy từ trái, UI sẽ hỏi ở lượt sau
+                result, i = [], 0
                 while i < len(digits):
                     matched = False
                     for length in range(len(digits) - i, 0, -1):
                         candidate = f"{grade}{alpha}{digits[i:i+length]}"
                         if candidate in known_classes:
-                            result.append(candidate)
-                            i += length
-                            matched = True
-                            break
+                            result.append(candidate); i += length; matched = True; break
                     if not matched:
-                        result.append(f"{grade}{alpha}{digits[i]}")
-                        i += 1
+                        result.append(f"{grade}{alpha}{digits[i]}"); i += 1
                 return result
             else:
-                # Không khớp known nào → mỗi ký tự 1 lớp
                 return [f"{grade}{alpha}{x}" for x in digits]
         else:
             return [f"{grade}{alpha}{x}" for x in digits]
 
     def _compact(m):
-        g,a,d = m.group(1),m.group(2),m.group(3)
-        # Nếu chuỗi số có leading zero → là 1 lớp duy nhất, KHÔNG tách
-        # Ví dụ: 10A02 → lớp 10A02, không phải 10A0 + 10A2
+        g, a, d = m.group(1), m.group(2), m.group(3)
+        # Leading zero → 1 lớp duy nhất (1A02 = lớp 1A02)
         if d.startswith('0'):
             c = f"{g}{a}{d}"
             if c not in classes: classes.append(c)
             return ''
-        # Nếu chữ số cuối là 0 và không có known_classes để phân biệt
-        # → coi là 1 lớp (10A10 = lớp 10A10, không phải 10A1 + 10A0)
+        # Trailing zero → ưu tiên coi là 1 lớp nếu khớp known hoặc không có known
         if d.endswith('0') and (not known_classes or f"{g}{a}{d}" in known_classes):
             c = f"{g}{a}{d}"
             if c not in classes: classes.append(c)
@@ -202,19 +198,24 @@ def expand_class_range(text, known_classes=None, resolved_ambiguities=None):
         for c in _split_digits(g, a, d):
             if c not in classes: classes.append(c)
         return ''
-    text = re.sub(r'(\d{2})([A-Za-z]+)(\d{3,})', _compact, text)
-    text = re.sub(r'(\d{2})([A-Za-z]+)(\d{2})(?![,;.\s])', _compact, text)
+
+    # Compact 3+ chữ số: 10A123 → tách, 1A123 → tách
+    text = re.sub(r'(0?[1-9]|1[0-2])([A-Za-z]+)(\d{3,})', _compact, text)
+    # Compact 2 chữ số không có phân tách: 10A12X → tách (trừ có dấu sau)
+    text = re.sub(r'(0?[1-9]|1[0-2])([A-Za-z]+)(\d{2})(?![,;.\s\d])', _compact, text)
 
     def _suffix(m):
-        base,nums = m.group(1),m.group(2)
-        for n in re.split(r'[,\s]+',nums):
+        base, nums = m.group(1), m.group(2)
+        for n in re.split(r'[,\s]+', nums):
             if n: classes.append(f"{base}{n.strip()}")
         return ''
-    text = re.sub(r'(\d{2}[A-Za-z]+)(\d(?:,\s*\d)+)(?!\d)', _suffix, text)
+    # Suffix dạng 1A3,4,5 hoặc 10A3,4
+    text = re.sub(r'((?:0?[1-9]|1[0-2])[A-Za-zÀ-ỹ]+)(\d(?:,\s*\d)+)(?!\d)', _suffix, text)
+
     classes.extend(re.findall(_CLASS_PAT, text))
-    result,seen = [],set()
+    result, seen = [], set()
     for c in classes:
-        c=c.strip().strip(',').strip()
+        c = c.strip().strip(',').strip()
         if c and c not in seen: seen.add(c); result.append(c)
     return result
 
@@ -236,7 +237,7 @@ def detect_ambiguous_in_data(df, col_pccm, col_gvcn, known_classes):
     if not known_classes:
         return []
 
-    _ambig_pat = re.compile(r'(\d{2})([A-Za-z]+)(\d{2,})', re.UNICODE)
+    _ambig_pat = re.compile(r'(0?[1-9]|1[0-2])([A-Za-z]+)(\d{2,})', re.UNICODE)
     found = {}   # token → dict
 
     col_hoten = None
@@ -253,8 +254,8 @@ def detect_ambiguous_in_data(df, col_pccm, col_gvcn, known_classes):
         # Chuẩn hoá sơ bộ giống parse_pccm
         text = re.sub(r'\([^)]*\)', '', praw)
         text = text.replace(';', ',').replace('\n', '+')
-        # Xoá range đã rõ (10A1-10A5, 10A1 đến 10A5)
-        text = re.sub(r'\d{2}[A-Za-z]+\d+\s*(?:đến|den|-)\s*\d{2}[A-Za-z]+\d+', '', text)
+        # Xoá range đã rõ (1A1-1A5, 10A1-10A5, 9B1 đến 9B4)
+        text = re.sub(r'(?:0?[1-9]|1[0-2])[A-Za-z]+\d+\s*(?:đến|den|-)\s*(?:0?[1-9]|1[0-2])[A-Za-z]+\d+', '', text)
 
         for m in _ambig_pat.finditer(text):
             grade, alpha, digits = m.group(1), m.group(2), m.group(3)
@@ -346,8 +347,11 @@ def parse_pccm(raw_pccm, known_classes=None, resolved_ambiguities=None):
         return '' if re.fullmatch(r'\d+',inner) else ','+inner+','
     text = re.sub(r'\(([^)]*)\)', ep, text)
     text = text.replace(';',',').replace('\n','+')
-    CRP = (r'\d{2}[A-Za-z]+\d+\s*(?:đến|den|-)\s*\d{2}[A-Za-z]+\d+'
-           r'|\d{2}[A-Za-z]+\d{3,}' r'|'+_CLASS_PAT)
+    # CRP: class-range pattern — hỗ trợ khối 1-12
+    _GP = r'(?:0?[1-9]|1[0-2])'   # grade prefix (local)
+    CRP = (r''+_GP+r'[A-Za-zÀ-ỹ]+\d+\s*(?:đến|den|-)\s*'+_GP+r'[A-Za-zÀ-ỹ]+\d+'   # range
+           r'|(?<!\d)'+_GP+r'[A-Za-zÀ-ỹ]+\d{3,}'                                    # compact 3+
+           r'|'+_CLASS_PAT)                                                            # normal
     tokens,results = [],[]
     tr = re.compile(r'(?P<class>'+CRP+r')|(?P<sep>[+,\s]+)|(?P<colon>:)'
                     r'|(?P<word>[A-Za-zÀ-ỹĐđ][A-Za-zÀ-ỹĐđ\(\)]*)|(?P<other>.)',re.UNICODE)
@@ -437,7 +441,8 @@ def detect_header_row(sdf):
     return 0
 
 def get_grade(cls):
-    m=re.match(r'^(\d{2})',str(cls).strip())
+    """Trả về số khối (int) từ tên lớp. Hỗ trợ khối 1-12 và dạng 01A, 09B."""
+    m = re.match(r'^(0?[1-9]|1[0-2])(?=[A-Za-zÀ-ỹ])', str(cls).strip(), re.UNICODE)
     return int(m.group(1)) if m else None
 
 def _sh(ws,row,ncols,color="1F4E79"):
@@ -503,7 +508,7 @@ def process_data(input_src, nien_khoa: str, progress_cb=None,
     known_classes: set = set()
     if col_gvcn:
         log("Đọc danh sách lớp từ cột GVCN...")
-        _raw_cls_pat = re.compile(r'\d{2}[A-Za-z]+\d+', re.UNICODE)
+        _raw_cls_pat = re.compile(r'(?:0?[1-9]|1[0-2])[A-Za-zÀ-ỹ]+\d*', re.UNICODE)
         for val in df[col_gvcn]:
             if pd.notna(val) and str(val).strip():
                 for c in _raw_cls_pat.findall(str(val)):
