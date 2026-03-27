@@ -138,6 +138,7 @@ with st.sidebar:
   <tr><td><code>10A123</code></td><td>⚠️ Hỏi: [10A1,2,3] hay [10A12,3]?</td></tr>
   <tr><td><code>10A12</code></td><td>→ 10A12 ✅ (chỉ 1 cách)</td></tr>
   <tr><td><code>10A1-10A5</code></td><td>→ 10A1..10A5 (range rõ ràng)</td></tr>
+  <tr><td><code>10ABC, 10A,B,C</code></td><td><b>Chưa phâm biệt được chữ, cần thêm lớp ở trước!</b></td></tr>
 </table>
 
 <h4>Các định dạng lớp được hỗ trợ</h4>
