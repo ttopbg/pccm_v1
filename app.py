@@ -306,7 +306,7 @@ if st.session_state.phase == "upload":
         st.session_state.raw_bytes       = raw_bytes
         st.session_state.nien_khoa       = nien_khoa
         st.session_state.known_classes   = known
-        st.session_state.result_filename = f"{fname}_output_{nien_khoa}.xlsx"
+        st.session_state.result_filename = f"Import_{fname}.xlsx"
 
         if ambig_list:
             st.session_state.ambig_list    = ambig_list
