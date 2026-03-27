@@ -195,22 +195,33 @@ def expand_class_range(text, known_classes=None, resolved_ambiguities=None):
             c = f"{g}{a}{d}"
             if c not in classes: classes.append(c)
             return ''
+        # 2 chữ số giống nhau (11, 22…) → rõ ràng là 1 lớp, không tách
+        if len(d) == 2 and d[0] == d[1]:
+            c = f"{g}{a}{d}"
+            if c not in classes: classes.append(c)
+            return ''
         for c in _split_digits(g, a, d):
             if c not in classes: classes.append(c)
         return ''
 
-    # Compact 3+ chữ số: 10A123 → tách, 1A123 → tách
-    text = re.sub(r'(0?[1-9]|1[0-2])([A-Za-z]+)(\d{3,})', _compact, text)
-    # Compact 2 chữ số không có phân tách: 10A12X → tách (trừ có dấu sau)
-    text = re.sub(r'(0?[1-9]|1[0-2])([A-Za-z]+)(\d{2})(?![,;.\s\d])', _compact, text)
+    # Compact 3+ chữ số: 10A123 → tách (luôn là compact)
+    # Lookbehind (?<![\w,;]): không trigger lại token đã expanded (đứng sau phẩy)
+    text = re.sub(r'(?<![\w,;])(0?[1-9]|1[0-2])([A-Za-z]+)(\d{3,})', _compact, text)
+    # Compact 2 chữ số: chỉ chạy khi có known_classes (để phân biệt 10A12=1 lớp vs 10A1+10A2)
+    if known_classes:
+        text = re.sub(r'(?<![\w,;])(0?[1-9]|1[0-2])([A-Za-z]+)(\d{2})(?![,;.\s\d])', _compact, text)
 
+    # Suffix dạng 1A3,4,5 hoặc 10A3,4 hoặc 11A4,11 (dùng \d+ để bắt số nhiều chữ số)
+    # _expand_suffix_groups_in_text đã xử lý ở parse_pccm; đây là fallback trong expand_class_range
     def _suffix(m):
         base, nums = m.group(1), m.group(2)
-        for n in re.split(r'[,\s]+', nums):
-            if n: classes.append(f"{base}{n.strip()}")
+        for n in re.split(r'[,;\s]+', nums):
+            n = n.strip()
+            if n: classes.append(f"{base}{n}")
         return ''
-    # Suffix dạng 1A3,4,5 hoặc 10A3,4
-    text = re.sub(r'((?:0?[1-9]|1[0-2])[A-Za-zÀ-ỹ]+)(\d(?:,\s*\d)+)(?!\d)', _suffix, text)
+    text = re.sub(
+        r'((?:0?[1-9]|1[0-2])[A-Za-zÀ-ỹ]+)(\d+(?:[,;]\s*\d+)+)(?![\d,])',
+        _suffix, text)
 
     classes.extend(re.findall(_CLASS_PAT, text))
     result, seen = [], set()
@@ -339,6 +350,53 @@ def detect_unknown_subjects(df, col_pccm):
 
     return list(found.values())
 
+def _expand_suffix_groups_in_text(text):
+    """
+    Tiền xử lý: mở rộng suffix groups trong chuỗi TRƯỚC KHI tokenize.
+    '11A4,11,12A6,7'   → '11A4,11A11,12A6,12A7'
+    '11A4,5,11,12A6,7' → '11A4,11A5,11A11,12A6,12A7'
+    '10A1,2,3'         → '10A1,10A2,10A3'
+    Dạng đã rõ (10A1, 10A2) không bị ảnh hưởng.
+    """
+    _GP = r'(?:0?[1-9]|1[0-2])'
+    # Bắt cụm: lớp đầy đủ + ít nhất 1 lần (phẩy/chấm phẩy + số-hoặc-lớp)
+    # CLASS trước \d+ trong alternation để tránh nhầm grade prefix thành suffix digit
+    _SFX_SEG = re.compile(
+        r'(?:' + _GP + r'[A-Za-zÀ-ỹ]+\d+)'
+        r'(?:\s*[,;]\s*'
+        r'(?:' + _GP + r'[A-Za-zÀ-ỹ]+\d+|\d+)'
+        r')+',
+        re.UNICODE
+    )
+    _STOK = re.compile(
+        r'(?P<cls>(?:' + _GP + r')[A-Za-zÀ-ỹ]+\d+)'
+        r'|(?P<num>\d+)'
+        r'|(?P<sep>[,;\s]+)'
+        r'|(?P<oth>.)',
+        re.UNICODE
+    )
+    def _expand_seg(m):
+        seg = m.group()
+        groups, cur_base, cur_nums = [], None, []
+        for tm in _STOK.finditer(seg):
+            kind, val = tm.lastgroup, tm.group().strip()
+            if not val or kind in ('sep', 'oth'):
+                continue
+            if kind == 'cls':
+                if cur_base and cur_nums:
+                    groups.append((cur_base, cur_nums))
+                bm = re.match(r'((?:' + _GP + r')[A-Za-zÀ-ỹ]+)(\d+)$', val, re.UNICODE)
+                cur_base = bm.group(1) if bm else val
+                cur_nums = [bm.group(2)] if bm else []
+            elif kind == 'num' and cur_base is not None:
+                cur_nums.append(val)
+        if cur_base and cur_nums:
+            groups.append((cur_base, cur_nums))
+        return ','.join(f'{b}{n}' for b, ns in groups for n in ns)
+
+    return _SFX_SEG.sub(_expand_seg, text)
+
+
 def parse_pccm(raw_pccm, known_classes=None, resolved_ambiguities=None):
     if not raw_pccm or (isinstance(raw_pccm,float) and pd.isna(raw_pccm)): return []
     text = str(raw_pccm).strip()
@@ -347,6 +405,9 @@ def parse_pccm(raw_pccm, known_classes=None, resolved_ambiguities=None):
         return '' if re.fullmatch(r'\d+',inner) else ','+inner+','
     text = re.sub(r'\(([^)]*)\)', ep, text)
     text = text.replace(';',',').replace('\n','+')
+    # Tiền xử lý: mở rộng suffix groups trước khi tokenize
+    # Ví dụ: '11A4,11,12A6,7' → '11A4,11A11,12A6,12A7'
+    text = _expand_suffix_groups_in_text(text)
     # CRP: class-range pattern — hỗ trợ khối 1-12
     _GP = r'(?:0?[1-9]|1[0-2])'   # grade prefix (local)
     CRP = (r''+_GP+r'[A-Za-zÀ-ỹ]+\d+\s*(?:đến|den|-)\s*'+_GP+r'[A-Za-zÀ-ỹ]+\d+'   # range
@@ -573,19 +634,8 @@ def process_data(input_src, nien_khoa: str, progress_cb=None,
             parts.append(f"{lop}-{code}({t['ho_ten']})" if len(pc[key])>1 else f"{lop}-{code}")
         t["pccm_str"]=",".join(parts)
 
-    # Thu thập tất cả lớp duy nhất từ cả PCCM lẫn CN
-    all_cls_set = set()
-    for t in teachers:
-        # Từ cột PCCM
-        for lop, _ in t["mon_lop_list"]:
-            lop = lop.strip()
-            if lop: all_cls_set.add(lop)
-        # Từ cột CN (gvcn_str đã được parse thành "lớp1, lớp2, ...")
-        if t.get("gvcn_str"):
-            for lop in t["gvcn_str"].split(","):
-                lop = lop.strip()
-                if lop: all_cls_set.add(lop)
-    all_cls = sorted(all_cls_set, key=lambda c: (get_grade(c) or 99, c))
+    all_cls = sorted(set(lop.strip() for t in teachers for lop,_ in t["mon_lop_list"]),
+                     key=lambda c:(get_grade(c) or 99,c))
 
     log("Tạo file Excel đầu ra...")
     wb = openpyxl.Workbook()
