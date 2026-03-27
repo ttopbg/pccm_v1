@@ -244,6 +244,24 @@ def expand_class_range(text, known_classes=None, resolved_ambiguities=None):
         if cur_base and cur_nums: groups.append((cur_base, cur_nums))
         return groups
 
+    # ── Apply suffix groups: 11A4,5,11,12A6,7 → 11A4,11A5,11A11,12A6,12A7 ──
+    # Bắt cụm: lớp đầy đủ + (phẩy + số-hoặc-lớp) lặp lại ≥1 lần
+    # CLASS alternation đứng trước \d+ để tránh nhầm grade prefix là suffix digit
+    _SFX_SEG = re.compile(
+        r'(?:0?[1-9]|1[0-2])[A-Za-zÀ-ỹ]+\d+'
+        r'(?:\s*[,;]\s*'
+        r'(?:(?:0?[1-9]|1[0-2])[A-Za-zÀ-ỹ]+\d+|\d+)'
+        r')+',
+        re.UNICODE
+    )
+    def _apply_sfx(m):
+        for base, nums in _parse_suffix_groups(m.group()):
+            for n in nums:
+                c = f"{base}{n}"
+                if c not in classes: classes.append(c)
+        return ''
+    text = _SFX_SEG.sub(_apply_sfx, text)
+
     classes.extend(re.findall(_CLASS_PAT, text))
     result, seen = [], set()
     for c in classes:
@@ -649,8 +667,17 @@ def process_data(input_src, nien_khoa: str, progress_cb=None,
             parts.append(f"{lop}-{code}({t['ho_ten']})" if len(pc[key])>1 else f"{lop}-{code}")
         t["pccm_str"]=",".join(parts)
 
-    all_cls = sorted(set(lop.strip() for t in teachers for lop,_ in t["mon_lop_list"]),
-                     key=lambda c:(get_grade(c) or 99,c))
+    # Thu thập tất cả lớp duy nhất từ cả PCCM lẫn CN
+    all_cls_set = set()
+    for t in teachers:
+        for lop, _ in t["mon_lop_list"]:
+            lop = lop.strip()
+            if lop: all_cls_set.add(lop)
+        if t.get("gvcn_str"):
+            for lop in t["gvcn_str"].split(","):
+                lop = lop.strip()
+                if lop: all_cls_set.add(lop)
+    all_cls = sorted(all_cls_set, key=lambda c: (get_grade(c) or 99, c))
 
     log("Tạo file Excel đầu ra...")
     wb = openpyxl.Workbook()
