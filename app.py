@@ -246,7 +246,7 @@ def _load_df_and_known(raw_bytes):
                                  "chu nhiem lop","lớp chủ nhiệm","lop chu nhiem","cn"])
     known = set()
     if col_gvcn:
-        pat = re.compile(r'\d{2}[A-Za-z]+\d+', re.UNICODE)
+        pat = re.compile(r'(?:0?[1-9]|1[0-2])[A-Za-zÀ-ỹ]+\d*', re.UNICODE)
         for val in df[col_gvcn]:
             if pd.notna(val) and str(val).strip():
                 for c in pat.findall(str(val)):
