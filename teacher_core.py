@@ -33,6 +33,7 @@ SUBJECT_MAP = {
     "công nghệ (cn)":"CONGNGHE(CN)","công nghệ(cn)":"CONGNGHE(CN)","cong nghe cn":"CONGNGHE(CN)",
     "công nghệ":"CONGNGHE","cong nghe":"CONGNGHE",
     "tin học":"TINHOC","tin hoc":"TINHOC","tin":"TINHOC","tinhoc":"TINHOC",
+    "nội dung giáo dục của địa phương":"NDGDDP",
     "nội dung giáo dục địa phương":"NDGDDP","giáo dục địa phương":"NDGDDP",
     "giao duc dia phuong":"NDGDDP","gdđp":"NDGDDP","gddp":"NDGDDP",
     "gd dp":"NDGDDP","gd11dp":"NDGDDP","nd gd dp":"NDGDDP",
