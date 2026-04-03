@@ -395,41 +395,73 @@ def _expand_suffix_groups_in_text(text):
     Tiền xử lý: mở rộng suffix groups ngay trong chuỗi text TRƯỚC KHI tokenize.
     '11A4,5,11,12A6,7' → '11A4,11A5,11A11,12A6,12A7'
     '10A1,2,3'         → '10A1,10A2,10A3'
-    Dạng không có suffix (10A1, 10A2) không bị ảnh hưởng.
+    '11A3, 12D'        → '11A3, 12D'  (12D = lớp riêng, không phải suffix)
+    Phân biệt lớp không có số (12D, 11D) với số suffix (4, 5, 11).
     """
     _GP = r'(?:0?[1-9]|1[0-2])'
-    # Match cụm: lớp đầy đủ + ít nhất 1 lần (phẩy + số-hoặc-lớp)
-    _SFX_SEG = re.compile(
-        r'(?:'+_GP+r'[A-Za-zÀ-ỹ]+\d+)'
-        r'(?:\s*[,;]\s*'
-        r'(?:'+_GP+r'[A-Za-zÀ-ỹ]+\d+|\d+)'
-        r')+',
-        re.UNICODE
-    )
-    _STOK = re.compile(
-        r'(?P<cls>(?:'+_GP+r')[A-Za-zÀ-ỹ]+\d+)'
-        r'|(?P<num>\d+)'
+    # Tokenizer phân biệt 3 loại: lớp có số cuối, lớp không có số, số thuần
+    _TOK = re.compile(
+        r'(?P<cls_full>(?:' + _GP + r')[A-Za-zÀ-ỹ]+\d+)'       # lớp có số: 11A3, 12A6
+        r'|(?P<cls_nodig>(?:' + _GP + r')[A-Za-zÀ-ỹ]+(?!\d))'   # lớp không số: 12D, 11D
+        r'|(?P<num>\d+)'                                           # số suffix: 5, 11
         r'|(?P<sep>[,;\s]+)'
         r'|(?P<oth>.)',
         re.UNICODE
     )
-    def _expand_seg(m):
-        seg = m.group()
-        groups, cur_base, cur_nums = [], None, []
-        for tm in _STOK.finditer(seg):
-            kind, val = tm.lastgroup, tm.group().strip()
-            if not val or kind in ('sep','oth'): continue
-            if kind == 'cls':
-                if cur_base and cur_nums: groups.append((cur_base, cur_nums))
-                bm = re.match(r'((?:'+_GP+r')[A-Za-zÀ-ỹ]+)(\d+)$', val, re.UNICODE)
-                cur_base, cur_nums = (bm.group(1), [bm.group(2)]) if bm else (val, [])
-            elif kind == 'num' and cur_base:
-                cur_nums.append(val)
-        if cur_base and cur_nums: groups.append((cur_base, cur_nums))
-        return ','.join(f'{b}{n}' for b, ns in groups for n in ns)
+    tokens = [(m.lastgroup, m.group().strip(), m.start(), m.end())
+              for m in _TOK.finditer(text)]
 
-    return _SFX_SEG.sub(_expand_seg, text)
+    runs = []   # (start, end, expanded_str) cho các đoạn có suffix thực sự
+    j = 0
+    while j < len(tokens):
+        kind, val, ts, te = tokens[j]
+        if kind != 'cls_full':
+            j += 1; continue
+        bm = re.match(r'((?:' + _GP + r')[A-Za-zÀ-ỹ]+)(\d+)$', val, re.UNICODE)
+        if not bm:
+            j += 1; continue
 
+        base, parts = bm.group(1), [bm.group(2)]
+        run_start, run_end = ts, te
+        k = j + 1
+
+        while k < len(tokens):
+            k2, v2, ts2, te2 = tokens[k]
+            if k2 == 'sep':
+                k += 1; continue
+            if k2 == 'num':
+                parts.append(v2); run_end = te2; k += 1
+            elif k2 == 'cls_full':
+                bm2 = re.match(r'((?:' + _GP + r')[A-Za-zÀ-ỹ]+)(\d+)$', v2, re.UNICODE)
+                if bm2 and bm2.group(1) != base:
+                    # Lớp mới khác base → flush nhóm cũ, bắt đầu nhóm mới
+                    if len(parts) > 1:
+                        runs.append((run_start, run_end,
+                                     ','.join(f'{base}{p}' for p in parts)))
+                    base, parts = bm2.group(1), [bm2.group(2)]
+                    run_start, run_end = ts2, te2
+                elif bm2:
+                    parts.append(bm2.group(2)); run_end = te2
+                k += 1
+            elif k2 == 'cls_nodig':
+                break   # lớp không số (12D, 11D) → kết thúc run
+            else:
+                break
+
+        if len(parts) > 1:
+            runs.append((run_start, run_end,
+                         ','.join(f'{base}{p}' for p in parts)))
+        j = k if k > j else j + 1
+
+    if not runs:
+        return text
+    result, pos = [], 0
+    for start, end, expanded in runs:
+        result.append(text[pos:start])
+        result.append(expanded)
+        pos = end
+    result.append(text[pos:])
+    return ''.join(result)
 
 def parse_pccm(raw_pccm, known_classes=None, resolved_ambiguities=None):
     if not raw_pccm or (isinstance(raw_pccm,float) and pd.isna(raw_pccm)): return []
