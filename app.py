@@ -7,7 +7,7 @@ import streamlit as st
 import pandas as pd
 from teacher_core import (process_data, detect_header_row, find_column,
                            detect_ambiguous_in_data, detect_unknown_subjects,
-                           _ALL_CODES)
+                           _ALL_CODES, CAP_HOC_OPTIONS)
 
 NIEN_KHOA_OPTIONS = ["2025-2026", "2026-2027", "2027-2028"]
 
@@ -124,6 +124,26 @@ with st.sidebar:
 </div>
 """, unsafe_allow_html=True)
 
+    with st.expander("🏫  2. Chọn cấp học", expanded=False):
+        st.markdown("""
+<div class="help-section">
+<h4>Tại sao phải chọn cấp học?</h4>
+<p>Mỗi cấp có bảng mã môn học riêng. Cùng tên môn nhưng mã sẽ khác nhau tùy cấp.</p>
+<table>
+  <tr><th>Cấp</th><th>Khối</th><th>Ví dụ mã môn đặc trưng</th></tr>
+  <tr><td><b>Tiểu học</b></td><td>1–5</td><td>TIENGVIET, TUNHIENVAXAHOI, DAODUC, THCN, KHOAHOC, HDTN</td></tr>
+  <tr><td><b>THCS</b></td><td>6–9</td><td>KHTN(VATLY), KHTN(HOAHOC), KHTN(SINH), LICHSUDIALI(SU), LICHSUDIALI(DIA), GDCD, TNHN</td></tr>
+  <tr><td><b>THPT</b></td><td>10–12</td><td>VATLY, HOAHOC, SINH, LICHSU, DIALY, GDKTPL, TNHN</td></tr>
+</table>
+<h4>Lưu ý khi chọn THCS</h4>
+<ul>
+  <li>Vật lý / Lý → <code>KHTN(VATLY)</code> (không phải VATLY như THPT)</li>
+  <li>Lịch sử → <code>LICHSUDIALI(SU)</code>, Địa lý → <code>LICHSUDIALI(DIA)</code></li>
+  <li>Hoạt động trải nghiệm (HDTN) → <code>TNHN</code></li>
+</ul>
+</div>
+""", unsafe_allow_html=True)
+
     with st.expander("✍️  2. Chú ý về cột PCCM", expanded=False):
         st.markdown("""
 <div class="help-section">
@@ -153,76 +173,76 @@ with st.sidebar:
 </div>
 """, unsafe_allow_html=True)
 
-    with st.expander("🔤  3. Nhận diện tên môn học", expanded=False):
-        st.markdown("""
-<div class="help-section">
-<h4>Bảng mã môn học</h4>
-<table>
-  <tr><th>Tên môn</th><th>Mã</th></tr>
-  <tr><td>Ngữ văn / Văn</td><td><code>NGUVAN</code></td></tr>
-  <tr><td>Toán / Toán học</td><td><code>TOAN</code></td></tr>
-  <tr><td>Tiếng Anh / Anh / NN1</td><td><code>ANH</code></td></tr>
-  <tr><td>Lịch sử / Sử</td><td><code>LICHSU</code></td></tr>
-  <tr><td>Địa lý / Địa</td><td><code>DIALY</code></td></tr>
-  <tr><td>Vật lý / Lý</td><td><code>VATLY</code></td></tr>
-  <tr><td>Hóa học / Hóa</td><td><code>HOAHOC</code></td></tr>
-  <tr><td>Sinh học / Sinh</td><td><code>SINH</code></td></tr>
-  <tr><td>Tin học / Tin</td><td><code>TINHOC</code></td></tr>
-  <tr><td>GDTC / Thể dục</td><td><code>GDTC</code></td></tr>
-  <tr><td>GDQP / Quốc phòng</td><td><code>GDQP</code></td></tr>
-  <tr><td>KTPL / GDKTPL</td><td><code>GDKTPL</code></td></tr>
-  <tr><td>GDĐP / GDDP</td><td><code>NDGDDP</code></td></tr>
-  <tr><td>HĐTN / TNHN</td><td><code>TNHN</code></td></tr>
-  <tr><td>Công nghệ</td><td><code>CONGNGHE</code></td></tr>
-  <tr><td>KHTN</td><td><code>KHTN</code></td></tr>
-  <tr><td>Lịch sử &amp; Địa lý</td><td><code>LICHSUDIALI</code></td></tr>
-</table>
-</div>
-""", unsafe_allow_html=True)
+#     with st.expander("🔤  3. Nhận diện tên môn học", expanded=False):
+#         st.markdown("""
+# <div class="help-section">
+# <h4>Bảng mã môn học</h4>
+# <table>
+#   <tr><th>Tên môn</th><th>Mã</th></tr>
+#   <tr><td>Ngữ văn / Văn</td><td><code>NGUVAN</code></td></tr>
+#   <tr><td>Toán / Toán học</td><td><code>TOAN</code></td></tr>
+#   <tr><td>Tiếng Anh / Anh / NN1</td><td><code>ANH</code></td></tr>
+#   <tr><td>Lịch sử / Sử</td><td><code>LICHSU</code></td></tr>
+#   <tr><td>Địa lý / Địa</td><td><code>DIALY</code></td></tr>
+#   <tr><td>Vật lý / Lý</td><td><code>VATLY</code></td></tr>
+#   <tr><td>Hóa học / Hóa</td><td><code>HOAHOC</code></td></tr>
+#   <tr><td>Sinh học / Sinh</td><td><code>SINH</code></td></tr>
+#   <tr><td>Tin học / Tin</td><td><code>TINHOC</code></td></tr>
+#   <tr><td>GDTC / Thể dục</td><td><code>GDTC</code></td></tr>
+#   <tr><td>GDQP / Quốc phòng</td><td><code>GDQP</code></td></tr>
+#   <tr><td>KTPL / GDKTPL</td><td><code>GDKTPL</code></td></tr>
+#   <tr><td>GDĐP / GDDP</td><td><code>NDGDDP</code></td></tr>
+#   <tr><td>HĐTN / TNHN</td><td><code>TNHN</code></td></tr>
+#   <tr><td>Công nghệ</td><td><code>CONGNGHE</code></td></tr>
+#   <tr><td>KHTN</td><td><code>KHTN</code></td></tr>
+#   <tr><td>Lịch sử &amp; Địa lý</td><td><code>LICHSUDIALI</code></td></tr>
+# </table>
+# </div>
+# """, unsafe_allow_html=True)
 
-    with st.expander("📊  4. Cấu trúc file đầu ra", expanded=False):
-        st.markdown("""
-<div class="help-section">
-<h4>File output gồm 3 sheet</h4>
-<p><span class="tag tag-blue">Sheet 1: Class</span> — danh sách lớp, sắp theo khối</p>
-<p><span class="tag tag-green">Sheet 2: Teachers</span></p>
-<table>
-  <tr><th>Cột</th><th>Nội dung</th></tr>
-  <tr><td>STT</td><td>Số thứ tự</td></tr>
-  <tr><td>Họ tên</td><td>Tên giáo viên</td></tr>
-  <tr><td>Ngày sinh</td><td>dd/mm/yyyy</td></tr>
-  <tr><td>SĐT</td><td>Để trống</td></tr>
-  <tr><td>Môn dạy</td><td>Mã môn, cách nhau dấu phẩy</td></tr>
-  <tr><td>TBM</td><td>Để trống</td></tr>
-  <tr><td>CN</td><td>Lớp chủ nhiệm (từ cột GVCN)</td></tr>
-  <tr><td>PCCM</td><td><code>10A1-TOAN,11B2-ANH</code></td></tr>
-</table>
-<p><span class="tag tag-orange">Sheet 3: Students</span> — tiêu đề cố định, dữ liệu trống</p>
-</div>
-""", unsafe_allow_html=True)
+#     with st.expander("📊  4. Cấu trúc file đầu ra", expanded=False):
+#         st.markdown("""
+# <div class="help-section">
+# <h4>File output gồm 3 sheet</h4>
+# <p><span class="tag tag-blue">Sheet 1: Class</span> — danh sách lớp, sắp theo khối</p>
+# <p><span class="tag tag-green">Sheet 2: Teachers</span></p>
+# <table>
+#   <tr><th>Cột</th><th>Nội dung</th></tr>
+#   <tr><td>STT</td><td>Số thứ tự</td></tr>
+#   <tr><td>Họ tên</td><td>Tên giáo viên</td></tr>
+#   <tr><td>Ngày sinh</td><td>dd/mm/yyyy</td></tr>
+#   <tr><td>SĐT</td><td>Để trống</td></tr>
+#   <tr><td>Môn dạy</td><td>Mã môn, cách nhau dấu phẩy</td></tr>
+#   <tr><td>TBM</td><td>Để trống</td></tr>
+#   <tr><td>CN</td><td>Lớp chủ nhiệm (từ cột GVCN)</td></tr>
+#   <tr><td>PCCM</td><td><code>10A1-TOAN,11B2-ANH</code></td></tr>
+# </table>
+# <p><span class="tag tag-orange">Sheet 3: Students</span> — tiêu đề cố định, dữ liệu trống</p>
+# </div>
+# """, unsafe_allow_html=True)
 
-    with st.expander("⚠️  5. Xử lý trùng lặp & lưu ý", expanded=False):
-        st.markdown("""
-<div class="help-section">
-<h4>Xử lý tổ hợp môn-lớp trùng</h4>
-<ul>
-  <li><b>Trùng trong cùng 1 GV:</b> bỏ tự động</li>
-  <li><b>Trùng giữa 2+ GV:</b> thêm tên GV để phân biệt</li>
-</ul>
-<div class="example-row">12A2-HOAHOC(Nguyễn Tuấn Anh)<br>12A2-HOAHOC(Đoàn Văn Chiến)</div>
-<h4>Không có cột GVCN</h4>
-<ul>
-  <li>Cột CN trong output để trống</li>
-  <li>Không có từ điển lớp → không hỏi ambiguous, dùng logic tách cũ</li>
-</ul>
-</div>
-""", unsafe_allow_html=True)
+#     with st.expander("⚠️  5. Xử lý trùng lặp & lưu ý", expanded=False):
+#         st.markdown("""
+# <div class="help-section">
+# <h4>Xử lý tổ hợp môn-lớp trùng</h4>
+# <ul>
+#   <li><b>Trùng trong cùng 1 GV:</b> bỏ tự động</li>
+#   <li><b>Trùng giữa 2+ GV:</b> thêm tên GV để phân biệt</li>
+# </ul>
+# <div class="example-row">12A2-HOAHOC(Nguyễn Tuấn Anh)<br>12A2-HOAHOC(Đoàn Văn Chiến)</div>
+# <h4>Không có cột GVCN</h4>
+# <ul>
+#   <li>Cột CN trong output để trống</li>
+#   <li>Không có từ điển lớp → không hỏi ambiguous, dùng logic tách cũ</li>
+# </ul>
+# </div>
+# """, unsafe_allow_html=True)
 
 
 # ── SESSION STATE ─────────────────────────────────────────────────────────────
 for k, v in [("phase","upload"),("ambig_list",[]),("resolved",{}),
              ("unknown_list",[]),("resolved_subjects",{}),
-             ("raw_bytes",None),("nien_khoa",NIEN_KHOA_OPTIONS[0]),
+             ("raw_bytes",None),("cap_hoc","THPT"),("nien_khoa",NIEN_KHOA_OPTIONS[0]),
              ("known_classes",set()),("result_bytes",None),("result_filename","")]:
     if k not in st.session_state:
         st.session_state[k] = v
@@ -230,7 +250,7 @@ for k, v in [("phase","upload"),("ambig_list",[]),("resolved",{}),
 
 def _reset():
     for k in ["phase","ambig_list","resolved","unknown_list","resolved_subjects",
-              "raw_bytes","nien_khoa","known_classes","result_bytes","result_filename"]:
+              "raw_bytes","cap_hoc","nien_khoa","known_classes","result_bytes","result_filename"]:
         st.session_state.pop(k, None)
     st.rerun()
 
@@ -259,7 +279,7 @@ def _load_df_and_known(raw_bytes):
 st.markdown("""
 <div class="main-header">
   <h1>🙃 Tạo file Import PCCM 🙃</h1>
-  <p>File Input cần có sheet <b>Data</b></p>
+  <p>File Input cần có sheet <b>Data</b> (hoặc sẽ lấy sheet đầu tiên của file)</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -269,15 +289,25 @@ st.markdown("""
 # ════════════════════════════════════════════════════════════════════════════
 if st.session_state.phase == "upload":
 
-    st.markdown('<div class="step-box"><b>1️⃣</b> Tải lên file Excel chứa sheet <code>Data</code></div>',
+    st.markdown('<div class="step-box"><b>1️⃣</b> Tải lên file cần chuyển đổi PCCM</div>',
                 unsafe_allow_html=True)
     uploaded = st.file_uploader("Chọn file Excel", type=["xlsx","xls","xlsm"],
                                  label_visibility="collapsed")
 
-    st.markdown('<div class="step-box"><b>2️⃣</b> Chọn niên khóa</div>', unsafe_allow_html=True)
+    st.markdown('<div class="step-box"><b>2️⃣</b> Chọn cấp học</div>', unsafe_allow_html=True)
+    _CAP_HOC_LABELS = {"THPT": "🎓 THPT (khối 10–12)", "THCS": "📚 THCS (khối 6–9)", "TH": "🏫 Tiểu học (khối 1–5)"}
+    cap_hoc = st.radio(
+        "Cấp học",
+        options=CAP_HOC_OPTIONS,
+        format_func=lambda x: _CAP_HOC_LABELS[x],
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+
+    st.markdown('<div class="step-box"><b>3️⃣</b> Chọn niên khóa</div>', unsafe_allow_html=True)
     nien_khoa = st.selectbox("Niên khóa", options=NIEN_KHOA_OPTIONS, label_visibility="collapsed")
 
-    st.markdown('<div class="step-box"><b>3️⃣</b> Nhấn nút để xử lý</div>', unsafe_allow_html=True)
+    st.markdown('<div class="step-box"><b>4️⃣</b> Nhấn <code><b>Chuyển đổi</b></code> để xử lý</div>', unsafe_allow_html=True)
     run_btn = st.button("▶  Chuyển đổi", type="primary", use_container_width=True,
                         disabled=(uploaded is None))
 
@@ -298,12 +328,13 @@ if st.session_state.phase == "upload":
                 if col_pccm:
                     if known:
                         ambig_list = detect_ambiguous_in_data(df, col_pccm, col_gvcn, known)
-                    unknown_list = detect_unknown_subjects(df, col_pccm)
+                    unknown_list = detect_unknown_subjects(df, col_pccm, cap_hoc)
             except Exception as e:
                 st.error(f"❌ Lỗi đọc file: {e}")
                 st.stop()
 
         st.session_state.raw_bytes       = raw_bytes
+        st.session_state.cap_hoc         = cap_hoc
         st.session_state.nien_khoa       = nien_khoa
         st.session_state.known_classes   = known
         st.session_state.result_filename = f"Import_{fname}.xlsx"
@@ -384,11 +415,13 @@ Vui lòng chọn cách tách đúng cho từng chuỗi bên dưới, sau đó nh
 # ════════════════════════════════════════════════════════════════════════════
 elif st.session_state.phase == "confirm_subjects":
     unknown_list = st.session_state.unknown_list
-    # Danh sách tất cả mã môn để chọn, sắp xếp
-    all_codes = sorted(set(_ALL_CODES))
-    # Thêm lựa chọn "Giữ nguyên" (không map)
+    _cap = st.session_state.get("cap_hoc", "THPT")
+    _CAP_LABEL = {"TH": "Tiểu học", "THCS": "THCS", "THPT": "THPT"}.get(_cap, _cap)
+    # Chỉ hiển thị mã môn phù hợp với cấp học đang xử lý
+    from teacher_core import _get_subject_map
+    _level_codes = sorted(set(_get_subject_map(_cap).values()))
     KEEP_RAW = "— Giữ nguyên (không map) —"
-    code_options = [KEEP_RAW] + all_codes
+    code_options = [KEEP_RAW] + _level_codes
 
     st.markdown(f"""
 <div class="warn-box">
@@ -455,6 +488,7 @@ elif st.session_state.phase == "processing":
 
     raw_bytes = st.session_state.raw_bytes
     nien_khoa = st.session_state.nien_khoa
+    cap_hoc   = st.session_state.get("cap_hoc", "THPT")
     resolved          = st.session_state.get("resolved", {})
     resolved_subjects = st.session_state.get("resolved_subjects", {})
 
@@ -481,6 +515,7 @@ elif st.session_state.phase == "processing":
     try:
         result_bytes = process_data(
             io.BytesIO(raw_bytes), nien_khoa,
+            cap_hoc=cap_hoc,
             progress_cb=progress_cb,
             resolved_ambiguities=resolved,
             resolved_subjects=resolved_subjects,
@@ -500,6 +535,10 @@ elif st.session_state.phase == "processing":
 # PHASE 4 — DONE
 # ════════════════════════════════════════════════════════════════════════════
 elif st.session_state.phase == "done":
+    _cap_done  = st.session_state.get("cap_hoc", "THPT")
+    _nk_done   = st.session_state.get("nien_khoa", "")
+    _cap_label = {"TH": "Tiểu học", "THCS": "THCS", "THPT": "THPT"}.get(_cap_done, _cap_done)
+
     summary_lines = []
     if st.session_state.get("resolved"):
         for tok, cls_list in st.session_state.resolved.items():
@@ -511,7 +550,8 @@ elif st.session_state.phase == "done":
         with st.expander(f"ℹ️ {len(summary_lines)} mục đã xác nhận thủ công", expanded=False):
             st.markdown("\n".join(summary_lines))
 
-    st.markdown('<div class="success-box">✅ <b>Chuyển đổi thành công!</b></div>',
+    st.markdown(f'<div class="success-box">✅ <b>Chuyển đổi thành công!</b> &nbsp;'
+                f'Cấp học: <b>{_cap_label}</b> &nbsp;|&nbsp; Niên khóa: <b>{_nk_done}</b></div>',
                 unsafe_allow_html=True)
     st.download_button(
         "⬇️  Tải xuống file Excel",
