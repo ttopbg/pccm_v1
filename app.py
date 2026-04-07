@@ -1,5 +1,5 @@
 """
-app.py  –  Streamlit web app, KHÔNG cần API key
+app.py – Streamlit web app, KHÔNG cần API key
 Deploy: push lên GitHub (app.py + teacher_core.py + requirements.txt) -> streamlit.io/cloud
 """
 import io
