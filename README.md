@@ -1,1 +1,1 @@
-tool full
+tạm đóng
