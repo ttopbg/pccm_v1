@@ -321,7 +321,7 @@ def expand_class_range(text, known_classes=None, resolved_ambiguities=None):
     # Bỏ sĩ số trong ngoặc: 10A1(52) → 10A1
     text = re.sub(r'((?:0?[1-9]|1[0-2])[A-Za-zÀ-ỹ]+\d*)\(\d+\)', r'\1', text, flags=re.UNICODE)
 
-    # Mở rộng suffix groups (cả số lẫn chữ): 7A,B,C,D → 7A,7B,7C,7D / 11A4,5 → 11A4,11A5
+    # Mở rộng suffix (số + chữ): 7A,B,C,D → 7A,7B,7C,7D / 11A4,5 → 11A4,11A5
     text = _expand_suffix_groups_in_text(text)
 
     classes = []
@@ -597,27 +597,21 @@ def _expand_suffix_groups_in_text(text):
     Tiền xử lý: mở rộng suffix groups ngay trong chuỗi text TRƯỚC KHI tokenize.
     Xử lý cả suffix số lẫn suffix chữ cái:
       '11A4,5,11,12A6,7' → '11A4,11A5,11A11,12A6,12A7'   (số suffix)
-      '10A1,2,3'         → '10A1,10A2,10A3'               (số suffix)
-      '7A,B,C,D'         → '7A,7B,7C,7D'                  (chữ suffix - MỚI)
+      '10A1,2,3'         → '10A1,10A2,10A3'
+      '7A,B,C,D'         → '7A,7B,7C,7D'                  (chữ suffix)
       '11A3, 12D'        → '11A3, 12D'  (12D = lớp riêng)
     """
-    # ── Bước 0: mở rộng alpha suffix: 7A,B,C,D → 7A,7B,7C,7D ───────────────
-    # Phải chạy trước bước số để tránh tokenizer bị nhầm
+    # ── Bước 0: alpha suffix "7A,B,C,D" → "7A,7B,7C,7D" ────────────────────
     _GP0 = r'(?:0?[1-9]|1[0-2])'
-    def _expand_alpha_suffix(m):
-        base_cls = m.group(1)   # vd: '7A'
+    def _alpha_sfx(m):
+        base_cls = m.group(1)
         grade    = re.match(r'(' + _GP0 + r')', base_cls).group(1)
-        parts    = [base_cls]
-        for ch in re.findall(r'[A-Za-zÀ-ỹ]', m.group(2)):
-            parts.append(f"{grade}{ch}")
-        return ','.join(parts)
-    # Pattern: lớp không số + (phẩy + 1 chữ cái đơn) lặp lại ≥1
+        extra    = re.findall(r'[A-Za-zÀ-ỹ](?![A-Za-zÀ-ỹ\d])', m.group(2))
+        return ','.join([base_cls] + [f"{grade}{ch}" for ch in extra])
     text = re.sub(
-        r'(' + _GP0 + r'[A-Za-zÀ-ỹ]+(?!\d))'          # lớp không số: 7A, 7AB...
-        r'((?:\s*[,;]\s*[A-Za-zÀ-ỹ](?![A-Za-zÀ-ỹ\d]))+)',  # ,B ,C ,D ...
-        _expand_alpha_suffix,
-        text,
-        flags=re.UNICODE
+        r'(' + _GP0 + r'[A-Za-zÀ-ỹ]+(?!\d))'
+        r'((?:\s*[,;]\s*[A-Za-zÀ-ỹ](?![A-Za-zÀ-ỹ\d]))+)',
+        _alpha_sfx, text, flags=re.UNICODE
     )
     _GP = r'(?:0?[1-9]|1[0-2])'
     # Tokenizer phân biệt 3 loại: lớp có số cuối, lớp không có số, số thuần
@@ -790,12 +784,12 @@ def detect_header_row(sdf):
 
 def build_known_classes_from_gvcn(df, col_gvcn) -> set:
     """
-    Thu thập danh sách lớp chuẩn từ cột GVCN, xử lý mọi dạng viết tắt:
-      - '7A'        → {7A}
-      - '7ABCD'     → {7A,7B,7C,7D}   compact alpha liên tiếp
-      - '7A,B,C,D'  → {7A,7B,7C,7D}   alpha suffix sau dấu phẩy
-      - '10A1'      → {10A1}           lớp có số, giữ nguyên
-      - '11A12'     → {11A12}          giữ nguyên, không tách
+    Thu thập danh sách lớp chuẩn từ cột GVCN, xử lý mọi dạng viết:
+      '7A'        → {7A}
+      '7ABCD'     → {7A,7B,7C,7D}   compact alpha liên tiếp
+      '7A,B,C,D'  → {7A,7B,7C,7D}   alpha suffix sau dấy phẩy
+      '10A1'      → {10A1}           lớp có số, giữ nguyên
+      '11A12'     → {11A12}          giữ nguyên
     Trả về set rỗng nếu col_gvcn không tồn tại hoặc toàn bộ ô trống.
     """
     known: set = set()
@@ -803,10 +797,10 @@ def build_known_classes_from_gvcn(df, col_gvcn) -> set:
         return known
     _GP = r'(?:0?[1-9]|1[0-2])'
     _TOK = re.compile(
-        r'(?P<full>'   + _GP + r'[A-Za-zÀ-ỹ]+\d+)'            # lớp đầy đủ: 10A1, 11A12
-        r'|(?P<base>'  + _GP + r'[A-Za-zÀ-ỹ]{2,}(?!\d))'      # compact alpha: 7ABCD, 7AB
-        r'|(?P<single>'+ _GP + r'[A-Za-zÀ-ỹ](?![A-Za-zÀ-ỹ\d]))'  # khối+1 chữ: 7A
-        r'|(?P<alpha>[A-Za-zÀ-ỹ](?![A-Za-zÀ-ỹ\d]))'           # alpha suffix: B, C
+        r'(?P<full>'   + _GP + r'[A-Za-zÀ-ỹ]+\d+)'
+        r'|(?P<base>'  + _GP + r'[A-Za-zÀ-ỹ]{2,}(?!\d))'
+        r'|(?P<single>'+ _GP + r'[A-Za-zÀ-ỹ](?![A-Za-zÀ-ỹ\d]))'
+        r'|(?P<alpha>[A-Za-zÀ-ỹ](?![A-Za-zÀ-ỹ\d]))'
         r'|(?P<sep>[,;\s]+)'
         r'|(?P<other>.)',
         re.UNICODE
@@ -821,17 +815,21 @@ def build_known_classes_from_gvcn(df, col_gvcn) -> set:
             if not v or kind == 'sep':
                 continue
             elif kind == 'full':
+                # Lớp đầy đủ có số: 10A1, 11A12 → thêm trực tiếp
                 known.add(v)
                 cur_base = None
             elif kind == 'base':
+                # Compact alpha: 7ABCD, 7AB → tách từng chữ cái
                 grade = re.match(r'(0?[1-9]|1[0-2])', v).group(1)
                 for ch in v[len(grade):]:
                     known.add(f"{grade}{ch}")
                 cur_base = grade
             elif kind == 'single':
+                # Lớp 1 chữ: 7A, 9B → thêm và set làm base
                 known.add(v)
                 cur_base = re.match(r'(0?[1-9]|1[0-2])', v).group(1)
             elif kind == 'alpha':
+                # Chữ suffix: "7A,B,C" → B,C là suffix của 7
                 if cur_base:
                     known.add(f"{cur_base}{v}")
             else:
@@ -913,10 +911,9 @@ def process_data(input_src, nien_khoa: str, cap_hoc: str = "AUTO",
     df = df.reset_index(drop=True)
 
     # ── Bước 1: Thu thập known_classes từ cột GVCN ───────────────────────────
-    # build_known_classes_from_gvcn xử lý đầy đủ tất cả các dạng:
-    #   7A, 7ABCD → {7A,7B,7C,7D},  7A,B,C,D → {7A,7B,7C,7D},  10A1 → {10A1}
-    # Khi cột GVCN trống/không tồn tại → known_classes rỗng,
-    # parse_pccm tiếp tục theo logic mặc định.
+    # build_known_classes_from_gvcn xử lý mọi dạng viết:
+    #   7A, 7ABCD → {7A…7D},  7A,B,C,D → {7A…7D},  10A1 → {10A1}
+    # Khi cột GVCN trống → set rỗng, parse_pccm chạy theo logic mặc định.
     known_classes: set = set()
     if col_gvcn:
         log("Đọc danh sách lớp từ cột GVCN...")
@@ -924,7 +921,7 @@ def process_data(input_src, nien_khoa: str, cap_hoc: str = "AUTO",
         if known_classes:
             log(f"  → {len(known_classes)} lớp: {', '.join(sorted(known_classes))}")
         else:
-            log("  → Cột GVCN không có dữ liệu lớp, xử lý PCCM theo logic mặc định.")
+            log("  → Cột GVCN trống, xử lý PCCM theo logic mặc định.")
 
     total = len(df)
     teachers = []
