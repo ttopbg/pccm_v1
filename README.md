@@ -1,1 +1,1 @@
-tạm đóng
+all - tạm đóng
