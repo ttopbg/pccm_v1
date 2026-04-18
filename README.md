@@ -1,1 +1,1 @@
-all - tạm đóng
+all - mở
